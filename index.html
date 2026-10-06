@@ -243,6 +243,17 @@ select.isian{appearance:auto}
 .tipe button[data-t="partai"][aria-pressed="true"]{background:var(--emas);color:#2b1d00}
 .baris-lain{display:flex;justify-content:center;margin-top:12px}
 
+/* ---------- pasang sebagai aplikasi (PWA) ---------- */
+.pasang{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:46px;margin-top:14px;padding:0 18px;border-radius:999px;font-weight:700;font-size:.92rem;color:#1c2a22;background:linear-gradient(180deg,#f0d892,#d6aa54);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 8px 18px -10px rgba(120,84,10,.7)}
+.pasang:active{transform:scale(.97)}
+.pasang svg{width:18px;height:18px}
+.pasang img{width:26px;height:26px;border-radius:7px;object-fit:cover}
+.atas .pasang-kecil{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--emas);color:#2b1d00;flex:none}
+.atas .pasang-kecil svg{width:18px;height:18px}
+.langkah{padding-left:20px;margin:10px 0 0}
+.langkah li{margin:8px 0}
+@media (display-mode:standalone){.pasang,.atas .pasang-kecil{display:none!important}}
+
 /* ---------- dialog & struk ---------- */
 dialog{border:0;border-radius:20px;padding:0;width:min(420px,calc(100vw - 28px));max-height:calc(100dvh - 40px);color:var(--teks)}
 dialog::backdrop{background:rgba(10,30,18,.55)}
@@ -317,6 +328,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <button class="btn utama penuh" id="tombolAuth" type="submit">Masuk</button>
       <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Nomor ID diberikan otomatis setelah akun disetujui pemilik toko.</p>
     </form>
+    <button class="pasang" data-pasang type="button" hidden><img data-logo alt="" onerror="this.remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Pasang aplikasi di HP</span></button>
   </div>
 </div>
 
@@ -343,6 +355,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <button data-hal="barang" data-admin hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4-8 4-8-4Z"/><path d="M4 8v8l8 4 8-4V8M12 12v8"/></svg>Barang</button>
         <button data-hal="karyawan" data-pemilik hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.500 20c.6-3.600 3.200-5.500 6.500-5.500s5.900 1.900 6.500 5.500M16 4.800a3.500 3.500 0 0 1 0 6.400M18.500 14.800c1.700.8 2.700 2.500 3 5.200"/></svg>Akun<span class="titik" id="titikTunggu" hidden></span></button>
       </nav>
+      <button class="pasang-kecil" data-pasang type="button" aria-label="Pasang aplikasi" title="Pasang aplikasi" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg></button>
       <button class="keluar" id="keluar">Keluar</button>
     </div>
   </div>
@@ -472,6 +485,14 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
     <button class="btn utama penuh" id="tutupStruk" style="margin-top:8px">Selesai</button>
     <button class="btn penuh kecil" id="ubahTrx" style="margin-top:10px" hidden>Ubah transaksi ini</button>
     <button class="btn bahaya penuh kecil" id="batalTrx" style="margin-top:8px" hidden>Batalkan transaksi ini</button>
+  </div>
+</dialog>
+
+<dialog id="dlgPasang" aria-labelledby="judulPasang">
+  <div class="dlg-isi">
+    <h2 id="judulPasang" style="font-size:1.1rem;color:var(--daun)">Pasang Kasir AMT di HP</h2>
+    <ol class="langkah" id="langkahPasang"></ol>
+    <button class="btn utama penuh" id="tutupPasang" style="margin-top:14px">Mengerti</button>
   </div>
 </dialog>
 
@@ -1354,6 +1375,27 @@ document.querySelectorAll("img[data-logo]").forEach(g => { g.src = ALAMAT_KATALO
 if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
+/* tombol pasang: Android/laptop memunculkan dialog pasang bawaan browser, iPhone menampilkan langkahnya */
+(function(){
+  const tombol = [...document.querySelectorAll("[data-pasang]")];
+  const sudahApp = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  if (sudahApp) return;
+  const ua = navigator.userAgent, iOS = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const safari = iOS && !/crios|fxios|edgios|opios/i.test(ua);
+  let tawaran = null;
+  const tampil = ya => tombol.forEach(t => { t.hidden = !ya; });
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); tawaran = e; tampil(true); });
+  window.addEventListener("appinstalled", () => { tawaran = null; tampil(false); roti("Kasir AMT sudah terpasang."); });
+  if (iOS) tampil(true);
+  const petunjuk = langkah => { $("langkahPasang").innerHTML = langkah.map(x => `<li>${x}</li>`).join(""); const d = $("dlgPasang"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); };
+  $("tutupPasang").onclick = () => $("dlgPasang").close();
+  tombol.forEach(t => t.addEventListener("click", async () => {
+    if (tawaran) { tawaran.prompt(); try { await tawaran.userChoice; } catch (e) {} tawaran = null; tampil(false); return; }
+    if (iOS) petunjuk(safari
+      ? ["Tekan tombol <b>Bagikan</b> (kotak dengan panah ke atas) di bawah layar.", "Geser ke bawah, pilih <b>Tambah ke Layar Utama</b>.", "Tekan <b>Tambah</b>. Ikon Kasir AMT muncul di layar utama."]
+      : ["Buka halaman ini lewat <b>Safari</b>.", "Tekan tombol <b>Bagikan</b>, lalu pilih <b>Tambah ke Layar Utama</b>.", "Tekan <b>Tambah</b>."]);
+  }));
+})();
 (async function mulai(){
   if (!/^https:\/\/.+/.test(SUPABASE_URL) || SUPABASE_ANON_KEY.length < 20 || !window.supabase) {
     if (!window.supabase && /^https:\/\//.test(SUPABASE_URL)) $("galatSetel").textContent = "Pustaka Supabase gagal dimuat. Cek internet, lalu muat ulang halaman.";
