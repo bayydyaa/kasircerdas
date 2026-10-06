@@ -414,6 +414,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <button class="btn kecil" id="muatLaporan">Muat ulang</button>
         <button class="btn kecil utama" id="eksporLaporan" data-admin hidden>Unduh Excel</button>
       </div>
+      <p class="info angka" id="waktuLaporan" style="margin:-6px 0 12px"></p>
       <div class="ringkas" id="ringkasLaporan"></div>
       <div class="dua">
         <div class="panel" id="terlaris"></div>
@@ -525,8 +526,9 @@ let REKENING = [];
 
 let sb = null, pengguna = null, profil = null;
 let ITEM = [];                         // semua barang jual: {kunci, nama, ukuran, kat, cari}
+let LAIN = [];                         // barang di luar katalog yang pernah dijual (kunci berawalan "lain|")
 const petaItem = new Map();            // kunci -> item
-const barang = new Map();              // kunci -> {harga, stok}
+const barang = new Map();              // kunci -> {harga, partai, nama}: harga terakhir sebagai saran
 const keranjang = new Map();           // id baris -> {kunci, nama, ukuran, qty, harga, tipe}; satu barang boleh 2 baris (ecer + partai)
 const st = { hal: "kasir", katKasir: -1, kataKasir: "", tampilKasir: PER_HALAMAN,
              katBarang: -1, kataBarang: "", saring: "semua", tampilBarang: PER_HALAMAN, trx: [], struk: null };
@@ -549,6 +551,7 @@ function pesan(e){
   if (/valid email|invalid format/i.test(m)) return "Format email tidak benar.";
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
+  if (/duplicate key|kunci_kirim/i.test(m)) return "Transaksi ini sedang disimpan. Tekan Simpan sekali lagi.";
   if (/pastikan_profil|buat_transaksi|ubah_transaksi|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
   return m || "Terjadi kesalahan.";
 }
@@ -604,12 +607,17 @@ function ambilDariHalaman(html){
 async function muatBarang(){
   const baru = new Map();
   for (let dari = 0; ; dari += 1000) {
-    const { data, error } = await sb.from("barang").select("kunci,harga,harga_partai,stok").order("kunci").range(dari, dari + 999);
+    const { data, error } = await sb.from("barang").select("kunci,nama,harga,harga_partai").order("kunci").range(dari, dari + 999);
     if (error) throw error;
-    for (const b of data) baru.set(b.kunci, { harga: Number(b.harga) || 0, partai: Number(b.harga_partai) || 0, stok: b.stok == null ? null : Number(b.stok) });
+    for (const b of data) baru.set(b.kunci, { harga: Number(b.harga) || 0, partai: Number(b.harga_partai) || 0, nama: b.nama || "" });
     if (data.length < 1000) break;
   }
   barang.clear(); baru.forEach((v, k) => barang.set(k, v));
+  /* barang di luar katalog yang pernah diketik kasir: ikut muncul saat dicari, supaya tidak diketik ulang
+     dengan ejaan berbeda (yang akan jadi baris terpisah di laporan) */
+  LAIN = [...barang].filter(([k, v]) => k.startsWith("lain|") && v.nama)
+    .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, cari: v.nama.toLowerCase() }))
+    .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 const hargaDari = k => (barang.get(k) || {}).harga || 0;          // harga ecer terakhir / acuan
 const partaiDari = k => (barang.get(k) || {}).partai || 0;        // harga partai terakhir
@@ -694,19 +702,22 @@ async function bukaAplikasi(){
   document.querySelectorAll("[data-pemilik]").forEach(el => { el.hidden = !adalahPemilik(); });
   $("judulLaporan").textContent = admin ? "Laporan penjualan" : "Penjualan saya";
   tampilLayar("aplikasi");
+  /* selalu mulai dari halaman Kasir (kalau tidak, pesan gagal memuat bisa tersembunyi di balik halaman lain
+     yang terakhir dibuka pengguna sebelumnya), dan buang sisa laporan milik pengguna sebelumnya */
+  tampilHal("kasir"); perbaruiBar();
+  $("cariKasir").value = $("cariBarang").value = ""; st.kataKasir = st.kataBarang = ""; st.katKasir = st.katBarang = -1; st.tampilKasir = st.tampilBarang = PER_HALAMAN;
+  $("ringkasLaporan").innerHTML = $("terlaris").innerHTML = $("daftarTrx").innerHTML = $("daftarKaryawan").innerHTML = ""; $("waktuLaporan").textContent = "";
   $("daftarKasir").innerHTML = ""; tampilKosongKasir("Memuat barang…", "");
   try {
     if (!ITEM.length) await muatKatalog();
     await muatBarang();
     await muatRekening();
-  } catch (e) { st.gagalMuat = pesan(e); tampilKosongKasir("Gagal memuat data", st.gagalMuat); return; }
+  } catch (e) { st.gagalMuat = pesan(e); tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
   st.gagalMuat = "";
   gambarChip("katKasir", "katKasir", gambarKasir);
   gambarChip("katBarang", "katBarang", gambarBarang);
   bukaHal("kasir"); gambarKeranjang();
   if (adalahPemilik()) hitungTunggu();
-  /* stok tidak dipakai lagi: kosongkan sisa angka stok lama supaya tidak ada penjualan yang tertolak */
-  if (admin) sb.from("barang").update({ stok: null }).gte("stok", -1000000000).then(() => {}, () => {});
 }
 
 async function muatRekening(){
@@ -721,12 +732,15 @@ async function muatRekening(){
 /* =========================================================
    NAVIGASI
    ========================================================= */
-function bukaHal(h){
-  if ((h === "barang" && !adalahAdmin()) || (h === "karyawan" && !adalahPemilik())) h = "kasir";
+function tampilHal(h){
   st.hal = h;
   ["kasir", "laporan", "barang", "karyawan"].forEach(x => { $("hal-" + x).hidden = x !== h; });
   $("tab").querySelectorAll("button").forEach(b => { if (b.dataset.hal === h) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   document.body.classList.remove("kr-buka");
+}
+function bukaHal(h){
+  if ((h === "barang" && !adalahAdmin()) || (h === "karyawan" && !adalahPemilik())) h = "kasir";
+  tampilHal(h);
   perbaruiBar();
   if (h === "kasir") gambarKasir();
   if (h === "laporan") muatLaporan();
@@ -754,16 +768,18 @@ const cocok = (it, kat, kata) => (kat < 0 || it.kat === kat) && (!kata || kata.s
 /* =========================================================
    KASIR
    ========================================================= */
-function tampilKosongKasir(judul, isi){
+function tampilKosongKasir(judul, isi, cobaLagi){
   const el = $("kosongKasir"); el.hidden = false;
-  el.innerHTML = `<h3>${esc(judul)}</h3><p>${esc(isi)}</p>`;
+  el.innerHTML = `<h3>${esc(judul)}</h3><p>${esc(isi)}</p>` + (cobaLagi ? `<button class="btn kecil utama" style="margin-top:12px" id="cobaMuat">Coba lagi</button>` : "");
+  if (cobaLagi) $("cobaMuat").onclick = () => bukaAplikasi();
   $("lebihKasir").hidden = true;
 }
 /* Semua barang katalog tampil. Harga TIDAK dikunci: kasir mengetik harga di keranjang,
    harga terakhir hanya muncul sebagai saran. */
 function gambarKasir(){
-  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; tampilKosongKasir("Gagal memuat data", st.gagalMuat); return; }
-  const kata = st.kataKasir, hasil = ITEM.filter(it => cocok(it, st.katKasir, kata));
+  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
+  const kata = st.kataKasir;
+  const hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => cocok(it, -1, kata)) : []);
   const el = $("daftarKasir");
   $("tambahLain").textContent = kata ? `Tambah "${$("cariKasir").value.trim()}" sebagai barang lain` : "Barang tidak ada di daftar? Ketik sendiri";
   if (!hasil.length) { el.innerHTML = ""; tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri."); return; }
@@ -772,7 +788,7 @@ function gambarKasir(){
     const q = barisDari(it.kunci).reduce((a, [, b]) => a + b.qty, 0), h = hargaDari(it.kunci);
     return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}">
       <span class="nm">${esc(it.nama)}</span><span class="hg angka${h ? "" : " kosong-hg"}">${h ? rp(h) : "isi harga"}</span>
-      <span class="uk">${esc(it.ukuran || "Satuan")}</span>
+      <span class="uk">${esc(it.ukuran || (it.lain ? "Barang lain" : "Satuan"))}</span>
       <span class="st angka">${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
   }).join("");
   $("lebihKasir").hidden = hasil.length <= st.tampilKasir;
@@ -782,7 +798,7 @@ $("cariKasir").addEventListener("input", e => { clearTimeout(jedaCari); jedaCari
 $("lebihKasir").onclick = () => { st.tampilKasir += PER_HALAMAN; gambarKasir(); };
 $("daftarKasir").addEventListener("click", e => {
   const b = e.target.closest(".barang"); if (!b || b.disabled) return;
-  const k = b.dataset.k, it = petaItem.get(k);
+  const k = b.dataset.k, it = petaItem.get(k) || LAIN.find(x => x.kunci === k); if (!it) return;
   tambahKeKeranjang(k, it.nama, it.ukuran);
 });
 /* semua baris keranjang milik satu barang: [[idBaris, baris], ...] */
@@ -797,7 +813,8 @@ function tambahKeKeranjang(kunci, nama, ukuran){
 $("tambahLain").onclick = () => {
   const nama = (prompt("Nama barang (tulis lengkap dengan ukurannya, mis. Paranet ecer 1 m):", $("cariKasir").value.trim()) || "").trim().replace(/\s+/g, " ").slice(0, 80);
   if (nama.length < 2) return;
-  tambahKeKeranjang("lain|" + nama.toLowerCase(), nama, "");
+  const kunciLain = "lain|" + nama.toLowerCase(), lama = barang.get(kunciLain);
+  tambahKeKeranjang(kunciLain, lama && lama.nama ? lama.nama : nama, "");
   if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
 };
 
@@ -807,9 +824,20 @@ function ubahQty(id, qty){
   if (qty <= 0) keranjang.delete(id); else b.qty = qty;
   gambarKeranjang(); if (st.hal === "kasir") gambarKasir();
 }
-const subBaris = b => Math.round(b.qty * (b.harga || 0));
+/* jumlah x harga dihitung lewat bilangan bulat (jumlah dikali 100 dulu) supaya 0,15 x 4.350 tidak
+   meleset satu rupiah dari hitungan server */
+const kali = (qty, harga) => Math.round(Math.round((Number(qty) || 0) * 100) * Math.round(Number(harga) || 0) / 100);
+const subBaris = b => kali(b.qty, b.harga);
 const totalKeranjang = () => { let t = 0; keranjang.forEach(b => { t += subBaris(b); }); return t; };
 const hargaLengkap = () => [...keranjang.values()].every(b => b.harga > 0);
+/* Tanda unik untuk satu isi keranjang. Kalau sinyal putus tepat saat menyimpan lalu Simpan ditekan lagi,
+   server mengenali tandanya dan tidak mencatat transaksi yang sama dua kali. Isi keranjang berubah = tanda baru. */
+function kunciKirim(muatan){
+  if (!st.benihKirim) st.benihKirim = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  const teks = JSON.stringify(muatan); let h = 5381;
+  for (let i = 0; i < teks.length; i++) h = ((h << 5) + h + teks.charCodeAt(i)) >>> 0;
+  return st.benihKirim + "-" + h.toString(36);
+}
 
 function gambarKeranjang(){
   const el = $("isiKr"), kosong = !keranjang.size;
@@ -817,6 +845,7 @@ function gambarKeranjang(){
   if (kosong) {
     el.innerHTML = `<div class="kosong"><h3>Keranjang kosong</h3><p>Tekan barang di daftar untuk memasukkannya.</p></div>`;
     document.body.classList.remove("kr-buka");
+    st.benihKirim = null;                 // keranjang yang disusun ulang dari nol dihitung sebagai transaksi baru
   } else {
     el.innerHTML = [...keranjang].map(([id, b]) => {
       const dua = barisDari(b.kunci).length > 1;      // barang ini sudah dipisah jadi ecer + partai
@@ -883,7 +912,7 @@ $("isiKr").addEventListener("change", e => {
 });
 $("kosongkanKr").onclick = () => {
   if (st.ubah) { $("batalUbah").click(); return; }       // sedang mengubah transaksi: tombol ini jadi "Batal ubah"
-  if (confirm("Kosongkan keranjang?")) { keranjang.clear(); gambarKeranjang(); gambarKasir(); }
+  if (confirm("Kosongkan keranjang?")) { keranjang.clear(); st.benihKirim = null; gambarKeranjang(); gambarKasir(); }
 };
 
 function perbaruiBar(){
@@ -916,8 +945,9 @@ $("simpanTrx").onclick = async () => {
     const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
     const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" };
     const ubah = st.ubah;
-    const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umum }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang() });
+    const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umum }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang(), p_kunci: kunciKirim(umum) });
     if (error) throw error;
+    st.benihKirim = null;
     if (ubah) { const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data; }
     st.ubah = null; aturPitaUbah();
     keranjang.clear(); $("pembeli").value = "";
@@ -969,7 +999,7 @@ $("batalUbah").onclick = () => {
 const waktuTeks = iso => new Date(iso).toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const jamTeks = iso => new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 const NAMA_METODE = { tunai: "Tunai", transfer: "Transfer", qris: "QRIS" };
-const jumlahItem = i => i.jumlah != null ? Number(i.jumlah) : Math.round(Number(i.qty) * Number(i.harga));
+const jumlahItem = i => i.jumlah != null ? Number(i.jumlah) : kali(i.qty, i.harga);
 function htmlStruk(t){
   const brs = (a, b) => `<div class="dua-sisi"><span>${esc(a)}</span><span>${esc(b)}</span></div>`;
   return `<div class="struk">
@@ -1096,14 +1126,24 @@ $("batalTrx").onclick = async () => {
    LAPORAN HARIAN
    ========================================================= */
 const tglLokal = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-async function muatLaporan(){
-  const el = $("tglLaporan"); if (!el.value) el.value = tglLokal(new Date());
+async function muatLaporan(diam){
+  const el = $("tglLaporan"), hariIni = tglLokal(new Date());
+  /* ganti hari (aplikasi dibiarkan terbuka semalaman): kembali ke tanggal hari ini */
+  if (!el.value || st.hariLaporan !== hariIni) { el.value = hariIni; st.hariLaporan = hariIni; }
+  const urut = st.urutLaporan = (st.urutLaporan || 0) + 1;
   const [y, m, d] = el.value.split("-").map(Number), awal = new Date(y, m - 1, d), akhir = new Date(y, m - 1, d + 1);
-  $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`;
+  if (!diam) { $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`; }
   const { data, error } = await sb.from("transaksi").select("*").gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString()).order("waktu", { ascending: false }).limit(1000);
-  if (error) { $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
+  if (urut !== st.urutLaporan) return;                         // sudah ada permintaan yang lebih baru
+  if (error) { if (!diam) $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
   st.trx = data || []; gambarLaporan();
+  $("waktuLaporan").textContent = "Data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
+/* selama menu Laporan terbuka, data diperbarui sendiri tiap menit dan saat aplikasi dibuka lagi,
+   supaya Excel yang diunduh admin tidak ketinggalan penjualan terbaru */
+const segarkanLaporan = () => { if (profil && st.hal === "laporan" && !document.hidden && !$("dlgStruk").open) muatLaporan(true); };
+setInterval(segarkanLaporan, 60000);
+document.addEventListener("visibilitychange", segarkanLaporan);
 /* gabungkan penjualan per barang + harga, urut dari transaksi paling awal (seperti rekap harian admin) */
 function rekapBarang(sah){
   /* Barang yang sama dijumlah jadi satu baris. Kalau harganya beda (atau ecer/partai beda),
@@ -1213,17 +1253,24 @@ function buatXlsxLaporan(){
 $("eksporLaporan").onclick = () => {
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try {
-    const url = URL.createObjectURL(buatXlsxLaporan()), a = document.createElement("a");
-    a.href = url; a.download = "penjualan-" + $("tglLaporan").value + ".xlsx";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    const nama = "penjualan-" + $("tglLaporan").value + ".xlsx", blob = buatXlsxLaporan();
+    const unduh = () => {
+      const url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = nama; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    };
+    /* di HP (terutama aplikasi yang dipasang di iPhone) unduhan biasa sering tidak jalan: pakai menu bagikan */
+    const f = new File([blob], nama, { type: blob.type });
+    if (window.matchMedia("(pointer:coarse)").matches && navigator.canShare && navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f] }).catch(e => { if (!e || e.name !== "AbortError") unduh(); });
+    } else unduh();
   } catch (e) { roti(pesan(e), true); }
 };
-$("tglLaporan").onchange = muatLaporan; $("muatLaporan").onclick = muatLaporan;
+$("tglLaporan").onchange = () => muatLaporan(); $("muatLaporan").onclick = () => muatLaporan();
 $("daftarTrx").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (!b) return; const t = st.trx.find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false); });
 
 /* =========================================================
-   BARANG: harga dan stok (admin)
+   BARANG: harga acuan (admin)
    ========================================================= */
 function gambarKemajuan(){
   const ada = ITEM.filter(it => hargaDari(it.kunci) > 0).length;
@@ -1257,11 +1304,11 @@ $("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harg
 $("daftarBarang").addEventListener("change", async e => {
   const brs = e.target.closest(".edit-brs"); if (!brs) return;
   const it = petaItem.get(brs.dataset.k), ket = brs.querySelector(".ket-simpan");
-  const harga = angkaDari(brs.querySelector(".f-harga").value), stok = null;
+  const harga = angkaDari(brs.querySelector(".f-harga").value);
   ket.className = "ket-simpan"; ket.textContent = "menyimpan…";
-  const { error } = await sb.from("barang").upsert({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
+  const { error } = await sb.from("barang").upsert({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, diubah: new Date().toISOString() });
   if (error) { ket.className = "ket-simpan gagal"; ket.textContent = "gagal: " + pesan(error); return; }
-  barang.set(it.kunci, { harga, partai: partaiDari(it.kunci), stok });
+  barang.set(it.kunci, { harga, partai: partaiDari(it.kunci), nama: it.nama });
   ket.className = "ket-simpan ok"; ket.textContent = "tersimpan";
   gambarKemajuan();
 });
@@ -1312,10 +1359,9 @@ $("berkasExcel").onchange = async e => {
       const hTeks = String(kolom(b, "harga")).trim();
       if (hTeks === "") continue;
       const harga = Math.max(0, Math.round(Number(hTeks.replace(/[^\d.,-]/g, "").replace(/[.,](?=\d{3}(\D|$))/g, "").replace(",", ".")) || 0));
-      const stok = null;
       const lama = barang.get(it.kunci);
       if (lama && lama.harga === harga) continue;
-      kirim.push({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
+      kirim.push({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, diubah: new Date().toISOString() });
     }
     if (!kirim.length) { status.textContent = "Tidak ada perubahan di file itu." + (lewati ? ` ${lewati} baris dilewati karena kolom Kunci tidak dikenal.` : ""); return; }
     if (!confirm(`${kirim.length} barang akan diperbarui harga acuannya. Lanjutkan?`)) { status.textContent = "Dibatalkan."; return; }
@@ -1402,7 +1448,7 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     tampilLayar("layarSetel"); return;
   }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { pengguna = profil = null; keranjang.clear(); aturMode(false); tampilLayar("layarMasuk"); } });
+  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { pengguna = profil = null; keranjang.clear(); st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
   try {
     const { data } = await sb.auth.getSession();
     if (data && data.session) { await setelahMasuk(data.session.user); return; }
