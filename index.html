@@ -210,6 +210,17 @@ button.brs{width:100%;text-align:start}
 .edit-kepala{display:grid;grid-template-columns:1fr 124px 84px;gap:8px;padding:10px 14px;font-size:.78rem;font-weight:700;color:var(--redup);border-bottom:1px solid var(--garis)}
 .edit-kepala span:not(:first-child){text-align:end}
 
+.kode{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.76rem;font-weight:800;letter-spacing:.02em;background:var(--daun);color:#fff;font-variant-numeric:tabular-nums}
+.brs .aksi-akun{display:flex;flex-wrap:wrap;gap:6px}
+.brs.tumpuk{flex-wrap:wrap}
+.brs.tumpuk .kiri{flex:1 1 100%}
+.brs .kiri small{display:block;overflow-wrap:anywhere}
+.sub-judul{padding:14px 16px 8px;font-size:.82rem;font-weight:700;color:var(--redup);border-top:1px solid var(--garis)}
+.sub-judul:first-child{border-top:0}
+textarea.isian{padding:10px 14px;min-height:96px;resize:vertical;line-height:1.5}
+select.isian{appearance:auto}
+.qty input{width:58px}
+
 /* ---------- dialog & struk ---------- */
 dialog{border:0;border-radius:20px;padding:0;width:min(420px,calc(100vw - 28px));max-height:calc(100dvh - 40px);color:var(--teks)}
 dialog::backdrop{background:rgba(10,30,18,.55)}
@@ -268,6 +279,11 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <div id="kolomNama" hidden>
         <label class="lbl" for="fNama">Nama lengkap</label>
         <input class="isian" id="fNama" autocomplete="name" maxlength="60">
+        <label class="lbl" for="fMinta">Daftar sebagai</label>
+        <select class="isian" id="fMinta">
+          <option value="karyawan">Karyawan (ID kar…)</option>
+          <option value="admin">Admin (ID adm…)</option>
+        </select>
       </div>
       <label class="lbl" for="fEmail">Email</label>
       <input class="isian" id="fEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email">
@@ -275,7 +291,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <input class="isian" id="fSandi" type="password" autocomplete="current-password" minlength="6">
       <p class="galat" id="galatAuth" role="alert"></p>
       <button class="btn utama penuh" id="tombolAuth" type="submit">Masuk</button>
-      <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Akun karyawan baru aktif setelah disetujui admin.</p>
+      <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Nomor ID diberikan otomatis setelah akun disetujui pemilik toko.</p>
     </form>
   </div>
 </div>
@@ -283,8 +299,8 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
 <!-- ============ LAYAR: menunggu persetujuan ============ -->
 <div class="layar" id="layarTunggu" hidden>
   <div class="kotak">
-    <h1 style="font-size:1.2rem;color:var(--daun);margin-bottom:8px">Menunggu persetujuan admin</h1>
-    <p>Akun <b id="emailTunggu"></b> sudah terdaftar. Minta admin toko mengaktifkannya di menu Karyawan, lalu tekan tombol di bawah.</p>
+    <h1 id="judulTunggu" style="font-size:1.2rem;color:var(--daun);margin-bottom:8px">Menunggu persetujuan pemilik</h1>
+    <p><b id="emailTunggu"></b><br><span id="teksTunggu"></span></p>
     <p class="galat" id="galatTunggu"></p>
     <button class="btn utama penuh" id="cekLagi">Cek status akun</button>
     <button class="btn penuh" id="keluarTunggu" style="margin-top:8px">Keluar</button>
@@ -301,7 +317,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <button data-hal="kasir" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h2l2.2 10.2a1 1 0 0 0 1 .8h7.9a1 1 0 0 0 1-.8L19.5 8H7"/><circle cx="10" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>Kasir</button>
         <button data-hal="laporan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Laporan</button>
         <button data-hal="barang" data-admin hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4-8 4-8-4Z"/><path d="M4 8v8l8 4 8-4V8M12 12v8"/></svg>Barang</button>
-        <button data-hal="karyawan" data-admin hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.500 20c.6-3.600 3.200-5.500 6.500-5.500s5.900 1.900 6.500 5.500M16 4.800a3.500 3.500 0 0 1 0 6.400M18.500 14.800c1.700.8 2.700 2.500 3 5.200"/></svg>Karyawan<span class="titik" id="titikTunggu" hidden></span></button>
+        <button data-hal="karyawan" data-pemilik hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.500 20c.6-3.600 3.200-5.500 6.500-5.500s5.900 1.900 6.500 5.500M16 4.800a3.500 3.500 0 0 1 0 6.400M18.500 14.800c1.700.8 2.700 2.500 3 5.200"/></svg>Akun<span class="titik" id="titikTunggu" hidden></span></button>
       </nav>
       <button class="keluar" id="keluar">Keluar</button>
     </div>
@@ -344,6 +360,10 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
               <div class="cepat" id="cepat"></div>
               <div class="kembali" id="barisKembali"><span id="lblKembali">Kembalian</span><b class="angka" id="kembali">Rp0</b></div>
             </div>
+            <div id="areaRekening" hidden>
+              <label class="lbl" for="rekening">Transfer ke rekening</label>
+              <select class="isian" id="rekening"></select>
+            </div>
             <label class="lbl" for="pembeli">Nama pembeli (opsional)</label>
             <input class="isian" id="pembeli" maxlength="60" autocomplete="off">
             <p class="galat" id="galatBayar" role="alert"></p>
@@ -359,6 +379,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <h1 id="judulLaporan">Laporan penjualan</h1>
         <input class="isian" id="tglLaporan" type="date" style="width:auto" aria-label="Tanggal laporan">
         <button class="btn kecil" id="muatLaporan">Muat ulang</button>
+        <button class="btn kecil utama" id="eksporLaporan" data-admin hidden>Unduh Excel</button>
       </div>
       <div class="ringkas" id="ringkasLaporan"></div>
       <div class="dua">
@@ -398,11 +419,19 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div id="daftarBarang"></div>
       </div>
       <div class="lebih" id="lebihBarang" hidden><button class="btn">Tampilkan lebih banyak</button></div>
+      <div class="panel kemajuan" style="margin-top:16px">
+        <b>Rekening tujuan transfer</b>
+        <p class="info" style="margin:6px 0 10px">Satu nama per baris. Kasir memilih salah satu saat pembeli bayar transfer, dan nama ini muncul di laporan.</p>
+        <textarea class="isian" id="daftarRekening" aria-label="Daftar rekening tujuan transfer"></textarea>
+        <div class="aksi"><button class="btn kecil utama" id="simpanRekening">Simpan rekening</button></div>
+        <p class="info" id="statusRekening" style="margin-top:8px" role="status"></p>
+      </div>
     </section>
 
     <!-- ----- KARYAWAN (admin) ----- -->
     <section id="hal-karyawan" hidden>
-      <div class="kepala-hal"><h1>Karyawan</h1><button class="btn kecil" id="muatKaryawan">Muat ulang</button></div>
+      <div class="kepala-hal"><h1>Akun</h1><button class="btn kecil" id="muatKaryawan">Muat ulang</button></div>
+      <p class="info" id="slotAkun" style="margin-bottom:12px"></p>
       <div class="panel" id="daftarKaryawan"></div>
     </section>
   </main>
@@ -442,6 +471,19 @@ const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g,
 const rp = n => "Rp" + Math.round(Number(n) || 0).toLocaleString("id-ID");
 const ribuan = n => Math.round(Number(n) || 0).toLocaleString("id-ID");
 const angkaDari = teks => { const s = String(teks == null ? "" : teks).replace(/\D/g, ""); return s ? parseInt(s, 10) : 0; };
+/* jumlah boleh pecahan (0,5). Terima koma atau titik sebagai tanda desimal. */
+const fq = n => (Number(n) || 0).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+function desimalDari(teks){
+  let s = String(teks == null ? "" : teks).trim().replace(/[^\d.,]/g, "");
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+const NAMA_PERAN = { pemilik: "Pemilik", admin: "Admin", karyawan: "Karyawan" };
+const adalahAdmin = () => !!profil && (profil.peran === "pemilik" || profil.peran === "admin");
+const adalahPemilik = () => !!profil && profil.peran === "pemilik";
+let REKENING = [];
 
 let sb = null, pengguna = null, profil = null;
 let ITEM = [];                         // semua barang jual: {kunci, nama, ukuran, kat, cari}
@@ -469,7 +511,7 @@ function pesan(e){
   if (/valid email|invalid format/i.test(m)) return "Format email tidak benar.";
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
-  if (/pastikan_profil|buat_transaksi|schema cache|does not exist/i.test(m)) return "Database belum disiapkan. Jalankan file supabase-kasir.sql di Supabase.";
+  if (/pastikan_profil|buat_transaksi|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
   return m || "Terjadi kesalahan.";
 }
 
@@ -560,12 +602,12 @@ $("formAuth").addEventListener("submit", async ev => {
   const tombol = $("tombolAuth"); tombol.disabled = true; tombol.textContent = "Tunggu…";
   try {
     if (modeDaftar) {
-      const { data, error } = await sb.auth.signUp({ email, password: sandi, options: { data: { nama } } });
+      const { data, error } = await sb.auth.signUp({ email, password: sandi, options: { data: { nama, minta: $("fMinta").value } } });
       if (error) throw error;
       // Supabase menyamarkan email yang sudah terdaftar (tanpa error) kalau Confirm email masih menyala
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) throw new Error("User already registered");
       if (!data.session) { galat.textContent = "Akun dibuat, tapi Confirm email di Supabase masih menyala. Matikan dulu, lalu pilih Masuk."; return; }
-      await setelahMasuk(data.session.user, nama);
+      await setelahMasuk(data.session.user, nama, $("fMinta").value);
     } else {
       const { data, error } = await sb.auth.signInWithPassword({ email, password: sandi });
       if (error) throw error;
@@ -576,17 +618,25 @@ $("formAuth").addEventListener("submit", async ev => {
   finally { tombol.disabled = false; tombol.textContent = modeDaftar ? "Daftar" : "Masuk"; }
 });
 
-async function setelahMasuk(user, nama){
+async function setelahMasuk(user, nama, minta){
   pengguna = user;
-  const { data, error } = await sb.rpc("pastikan_profil", { p_nama: nama || (user.user_metadata && user.user_metadata.nama) || "" });
+  const meta = user.user_metadata || {};
+  const { data, error } = await sb.rpc("pastikan_profil", { p_nama: nama || meta.nama || "", p_minta: minta || meta.minta || "karyawan" });
   if (error) throw error;
   profil = data;
-  if (!profil.aktif) { $("emailTunggu").textContent = profil.email; $("galatTunggu").textContent = ""; tampilLayar("layarTunggu"); return; }
+  if (!profil.aktif) {
+    $("emailTunggu").textContent = profil.email; $("galatTunggu").textContent = "";
+    $("judulTunggu").textContent = profil.dihapus ? "Akun ini sudah dihapus" : "Menunggu persetujuan pemilik";
+    $("teksTunggu").textContent = profil.dihapus
+      ? "Akun ini sudah tidak bisa memakai kasir. Hubungi pemilik toko kalau ini keliru."
+      : "Akun sudah terdaftar sebagai calon " + (profil.minta === "admin" ? "admin" : "karyawan") + ". Minta pemilik toko menyetujuinya di menu Akun, lalu tekan tombol di bawah. Nomor ID diberikan saat disetujui.";
+    tampilLayar("layarTunggu"); return;
+  }
   await bukaAplikasi();
 }
 $("cekLagi").onclick = async () => {
   $("galatTunggu").textContent = "";
-  try { await setelahMasuk(pengguna); if (!profil.aktif) $("galatTunggu").textContent = "Belum diaktifkan admin."; }
+  try { await setelahMasuk(pengguna); if (!profil.aktif) $("galatTunggu").textContent = profil.dihapus ? "Akun masih nonaktif." : "Belum disetujui pemilik."; }
   catch (e) { $("galatTunggu").textContent = pesan(e); }
 };
 async function keluar(){
@@ -599,27 +649,38 @@ $("keluar").onclick = () => { if (!keranjang.size || confirm("Keranjang masih be
 $("keluarTunggu").onclick = keluar;
 
 async function bukaAplikasi(){
-  const admin = profil.peran === "admin";
-  $("siapa").textContent = profil.nama + " · " + (admin ? "Admin" : "Karyawan");
+  const admin = adalahAdmin();
+  $("siapa").textContent = (profil.kode ? profil.kode + " · " : "") + profil.nama + " · " + (NAMA_PERAN[profil.peran] || profil.peran);
   document.querySelectorAll("[data-admin]").forEach(el => { el.hidden = !admin; });
+  document.querySelectorAll("[data-pemilik]").forEach(el => { el.hidden = !adalahPemilik(); });
   $("judulLaporan").textContent = admin ? "Laporan penjualan" : "Penjualan saya";
   tampilLayar("aplikasi");
   $("daftarKasir").innerHTML = ""; tampilKosongKasir("Memuat barang…", "");
   try {
     if (!ITEM.length) await muatKatalog();
     await muatBarang();
+    await muatRekening();
   } catch (e) { tampilKosongKasir("Gagal memuat data", pesan(e)); return; }
   gambarChip("katKasir", "katKasir", gambarKasir);
   gambarChip("katBarang", "katBarang", gambarBarang);
   bukaHal("kasir"); gambarKeranjang();
-  if (admin) hitungTunggu();
+  if (adalahPemilik()) hitungTunggu();
+}
+
+async function muatRekening(){
+  const { data, error } = await sb.from("pengaturan").select("kunci,nilai").eq("kunci", "rekening");
+  if (error) throw error;
+  const nilai = data && data[0] ? data[0].nilai : [];
+  REKENING = (Array.isArray(nilai) ? nilai : []).map(x => String(x).trim()).filter(Boolean);
+  $("rekening").innerHTML = REKENING.map(r => `<option>${esc(r)}</option>`).join("");
+  $("daftarRekening").value = REKENING.join("\n");
 }
 
 /* =========================================================
    NAVIGASI
    ========================================================= */
 function bukaHal(h){
-  if ((h === "barang" || h === "karyawan") && profil.peran !== "admin") h = "kasir";
+  if ((h === "barang" && !adalahAdmin()) || (h === "karyawan" && !adalahPemilik())) h = "kasir";
   st.hal = h;
   ["kasir", "laporan", "barang", "karyawan"].forEach(x => { $("hal-" + x).hidden = x !== h; });
   $("tab").querySelectorAll("button").forEach(b => { if (b.dataset.hal === h) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
@@ -662,18 +723,18 @@ function gambarKasir(){
   if (!hasil.length) {
     el.innerHTML = "";
     const adaHarga = ITEM.some(it => hargaDari(it.kunci) > 0);
-    if (!adaHarga) tampilKosongKasir("Belum ada barang yang punya harga", profil.peran === "admin" ? "Buka menu Barang, lalu isi harga. Barang muncul di sini setelah harganya diisi." : "Minta admin mengisi harga barang dulu.");
+    if (!adaHarga) tampilKosongKasir("Belum ada barang yang punya harga", adalahAdmin() ? "Buka menu Barang, lalu isi harga. Barang muncul di sini setelah harganya diisi." : "Minta admin mengisi harga barang dulu.");
     else tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain. Barang yang belum punya harga tidak tampil di kasir.");
     return;
   }
   $("kosongKasir").hidden = true;
   el.innerHTML = hasil.slice(0, st.tampilKasir).map(it => {
     const stok = stokDari(it.kunci), q = keranjang.get(it.kunci) || 0, habis = stok !== null && stok <= 0;
-    const ket = stok === null ? "" : habis ? "Habis" : "Stok " + ribuan(stok);
+    const ket = stok === null ? "" : habis ? "Habis" : "Stok " + fq(stok);
     return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}"${habis ? " disabled" : ""}>
       <span class="nm">${esc(it.nama)}</span><span class="hg angka">${rp(hargaDari(it.kunci))}</span>
       <span class="uk">${esc(it.ukuran || "Satuan")}</span>
-      <span class="st angka${habis ? " habis" : stok !== null && stok <= 5 ? " tipis" : ""}">${ket}${q ? `<span class="jml">${q}</span>` : ""}</span></button>`;
+      <span class="st angka${habis ? " habis" : stok !== null && stok <= 5 ? " tipis" : ""}">${ket}${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
   }).join("");
   $("lebihKasir").hidden = hasil.length <= st.tampilKasir;
 }
@@ -684,14 +745,13 @@ $("daftarKasir").addEventListener("click", e => { const b = e.target.closest(".b
 
 function ubahQty(kunci, qty){
   const it = petaItem.get(kunci); if (!it) return;
-  qty = Math.max(0, Math.min(99999, Math.floor(Number(qty) || 0)));
+  qty = Math.max(0, Math.min(99999, Math.round((Number(qty) || 0) * 100) / 100));
   const stok = stokDari(kunci);
-  if (stok !== null && qty > stok) { qty = Math.max(0, stok); roti(`Stok ${it.nama}${it.ukuran ? " " + it.ukuran : ""} tinggal ${stok}.`, true); }
+  if (stok !== null && qty > stok) { qty = Math.max(0, stok); roti(`Stok ${it.nama}${it.ukuran ? " " + it.ukuran : ""} tinggal ${fq(stok)}.`, true); }
   if (qty <= 0) keranjang.delete(kunci); else keranjang.set(kunci, qty);
   gambarKeranjang(); if (st.hal === "kasir") gambarKasir();
 }
-const totalKeranjang = () => { let t = 0; keranjang.forEach((q, k) => { t += q * hargaDari(k); }); return t; };
-const jumlahKeranjang = () => { let n = 0; keranjang.forEach(q => { n += q; }); return n; };
+const totalKeranjang = () => { let t = 0; keranjang.forEach((q, k) => { t += Math.round(q * hargaDari(k)); }); return t; };
 
 function gambarKeranjang(){
   const el = $("isiKr"), kosong = !keranjang.size;
@@ -704,8 +764,8 @@ function gambarKeranjang(){
       const it = petaItem.get(k), h = hargaDari(k);
       return `<div class="kr-item" data-k="${esc(k)}">
         <div><div class="nm">${esc(it.nama)}</div><div class="ket angka">${esc(it.ukuran || "Satuan")} · ${rp(h)}</div></div>
-        <div class="sub angka">${rp(h * q)}</div>
-        <div class="qty"><button data-a="-1" aria-label="Kurangi">−</button><input type="number" inputmode="numeric" min="0" value="${q}" aria-label="Jumlah ${esc(it.nama)}"><button data-a="1" aria-label="Tambah">+</button></div>
+        <div class="sub angka">${rp(Math.round(h * q))}</div>
+        <div class="qty"><button data-a="-1" aria-label="Kurangi">−</button><input type="text" inputmode="decimal" autocomplete="off" value="${fq(q)}" aria-label="Jumlah ${esc(it.nama)}"><button data-a="1" aria-label="Tambah">+</button></div>
         <div style="text-align:end;align-self:center"><button class="tautan" data-a="0" style="color:var(--merah);font-size:.85rem">Hapus</button></div></div>`;
     }).join("");
   }
@@ -716,13 +776,13 @@ $("isiKr").addEventListener("click", e => {
   const k = b.closest(".kr-item").dataset.k, a = Number(b.dataset.a);
   ubahQty(k, a === 0 ? 0 : (keranjang.get(k) || 0) + a);
 });
-$("isiKr").addEventListener("change", e => { if (e.target.matches(".qty input")) ubahQty(e.target.closest(".kr-item").dataset.k, e.target.value); });
+$("isiKr").addEventListener("change", e => { if (e.target.matches(".qty input")) ubahQty(e.target.closest(".kr-item").dataset.k, desimalDari(e.target.value)); });
 $("kosongkanKr").onclick = () => { if (confirm("Kosongkan keranjang?")) { keranjang.clear(); gambarKeranjang(); gambarKasir(); } };
 
 function perbaruiBar(){
   const tampil = st.hal === "kasir" && keranjang.size > 0;
   $("barKr").hidden = !tampil;
-  if (tampil) { $("barJumlah").textContent = jumlahKeranjang() + " barang di keranjang"; $("barTotal").textContent = rp(totalKeranjang()); }
+  if (tampil) { $("barJumlah").textContent = keranjang.size + " jenis barang di keranjang"; $("barTotal").textContent = rp(totalKeranjang()); }
 }
 $("barKr").onclick = () => document.body.classList.add("kr-buka");
 $("tutupKr").onclick = $("tirai").onclick = () => document.body.classList.remove("kr-buka");
@@ -732,6 +792,7 @@ function hitungBayar(){
   const total = totalKeranjang(), tunai = metode() === "tunai", uang = angkaDari($("uang").value);
   $("totalKr").textContent = rp(total);
   $("areaTunai").hidden = !tunai;
+  $("areaRekening").hidden = !(metode() === "transfer" && REKENING.length);
   if (tunai) {
     const calon = new Set();
     [5000, 10000, 20000, 50000, 100000].forEach(p => calon.add(Math.ceil(total / p) * p));
@@ -754,7 +815,7 @@ $("simpanTrx").onclick = async () => {
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
     const item = [...keranjang].map(([kunci, qty]) => ({ kunci, qty }));
-    const { data, error } = await sb.rpc("buat_transaksi", { p_item: item, p_metode: metode(), p_bayar: angkaDari($("uang").value), p_pembeli: $("pembeli").value.trim() });
+    const { data, error } = await sb.rpc("buat_transaksi", { p_item: item, p_metode: metode(), p_bayar: angkaDari($("uang").value), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" });
     if (error) throw error;
     keranjang.clear(); $("uang").value = ""; $("pembeli").value = "";
     document.querySelector('input[name="metode"][value="tunai"]').checked = true;
@@ -773,6 +834,7 @@ $("simpanTrx").onclick = async () => {
 const waktuTeks = iso => new Date(iso).toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const jamTeks = iso => new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 const NAMA_METODE = { tunai: "Tunai", transfer: "Transfer", qris: "QRIS" };
+const jumlahItem = i => i.jumlah != null ? Number(i.jumlah) : Math.round(Number(i.qty) * Number(i.harga));
 function htmlStruk(t){
   const brs = (a, b) => `<div class="dua-sisi"><span>${esc(a)}</span><span>${esc(b)}</span></div>`;
   return `<div class="struk">
@@ -780,23 +842,23 @@ function htmlStruk(t){
     <div class="tengah">${esc(TOKO.alamat)}</div>
     <div class="tengah">WA ${esc(TOKO.telp)}</div>
     ${t.batal ? `<div class="tengah"><span class="batal-cap">DIBATALKAN</span></div>` : ""}
-    <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
-    <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}</div>${brs("  " + i.qty + " x " + ribuan(i.harga), ribuan(i.qty * i.harga))}`).join("")}
-    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs(NAMA_METODE[t.metode] || t.metode, rp(t.bayar))}${t.metode === "tunai" ? brs("Kembali", rp(t.kembali)) : ""}
+    <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
+    <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}</div>${brs("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)))}`).join("")}
+    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${t.metode === "tunai" ? brs("Kembali", rp(t.kembali)) : ""}
     <hr><div class="tengah">Terima kasih sudah berbelanja</div></div>`;
 }
 function teksStruk(t){
   const g = "--------------------------------";
-  return [`*${TOKO.nama}*`, TOKO.alamat, g, `No: ${t.nomor || "#" + t.id}`, `Waktu: ${waktuTeks(t.waktu)}`, `Kasir: ${t.kasir_nama}`, g,
-    ...(t.item || []).map(i => `${i.nama}${i.ukuran ? " " + i.ukuran : ""}\n  ${i.qty} x ${ribuan(i.harga)} = ${ribuan(i.qty * i.harga)}`),
-    g, `*TOTAL: ${rp(t.total)}*`, `${NAMA_METODE[t.metode] || t.metode}: ${rp(t.bayar)}`, ...(t.metode === "tunai" ? [`Kembali: ${rp(t.kembali)}`] : []), g, "Terima kasih sudah berbelanja."].join("\n");
+  return [`*${TOKO.nama}*`, TOKO.alamat, g, `No: ${t.nomor || "#" + t.id}`, `Waktu: ${waktuTeks(t.waktu)}`, `Kasir: ${t.kasir_kode ? t.kasir_kode + " " : ""}${t.kasir_nama}`, g,
+    ...(t.item || []).map(i => `${i.nama}${i.ukuran ? " " + i.ukuran : ""}\n  ${fq(i.qty)} x ${ribuan(i.harga)} = ${ribuan(jumlahItem(i))}`),
+    g, `*TOTAL: ${rp(t.total)}*`, `${NAMA_METODE[t.metode] || t.metode}${t.rekening ? " ke " + t.rekening : ""}: ${rp(t.bayar)}`, ...(t.metode === "tunai" ? [`Kembali: ${rp(t.kembali)}`] : []), g, "Terima kasih sudah berbelanja."].join("\n");
 }
 function bukaStruk(t, baru){
   st.struk = t;
   $("isiStruk").innerHTML = htmlStruk(t);
   $("nomorWa").value = "";
   $("tutupStruk").textContent = baru ? "Selesai" : "Tutup";
-  $("batalTrx").hidden = !(profil.peran === "admin" && !t.batal && !baru);
+  $("batalTrx").hidden = !(adalahAdmin() && !t.batal && !baru);
   const d = $("dlgStruk"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
 $("tutupStruk").onclick = () => $("dlgStruk").close();
@@ -831,28 +893,67 @@ async function muatLaporan(){
   if (error) { $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
   st.trx = data || []; gambarLaporan();
 }
-function gambarLaporan(){
-  const sah = st.trx.filter(t => !t.batal), perMetode = { tunai: 0, transfer: 0, qris: 0 }, perBarang = new Map();
-  let omzet = 0, jml = 0;
-  for (const t of sah) {
-    omzet += Number(t.total); perMetode[t.metode] = (perMetode[t.metode] || 0) + Number(t.total);
+/* gabungkan penjualan per barang + harga, urut dari transaksi paling awal (seperti rekap harian admin) */
+function rekapBarang(sah){
+  const peta = new Map();
+  for (const t of sah.slice().reverse())
     for (const i of (t.item || [])) {
-      jml += i.qty;
-      const k = i.kunci, x = perBarang.get(k) || { nama: i.nama, ukuran: i.ukuran, qty: 0, uang: 0 };
-      x.qty += i.qty; x.uang += i.qty * i.harga; perBarang.set(k, x);
+      const k = i.kunci + "|" + i.harga, x = peta.get(k) || { nama: i.nama + (i.ukuran ? " " + i.ukuran : ""), harga: Number(i.harga), qty: 0, uang: 0 };
+      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); peta.set(k, x);
     }
-  }
+  return [...peta.values()];
+}
+function gambarLaporan(){
+  const sah = st.trx.filter(t => !t.batal);
+  let omzet = 0, tunai = 0;
+  for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); }
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
-  $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Transaksi", ribuan(sah.length)) + kotak("Barang terjual", ribuan(jml)) +
-    kotak("Tunai", rp(perMetode.tunai)) + kotak("Transfer", rp(perMetode.transfer)) + kotak("QRIS", rp(perMetode.qris));
-  const laris = [...perBarang.values()].sort((a, b) => b.qty - a.qty || b.uang - a.uang).slice(0, 10);
-  $("terlaris").innerHTML = `<h2>Paling banyak terjual</h2>` + (laris.length ? laris.map(x =>
-    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small>${esc(x.ukuran || "Satuan")}</small></div><div class="kanan angka">${ribuan(x.qty)}<br><small style="font-weight:600;color:var(--redup)">${rp(x.uang)}</small></div></div>`).join("")
+  $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(sah.length)) + kotak("Total cash", rp(tunai)) + kotak("Total transfer", rp(omzet - tunai));
+  const rekap = rekapBarang(sah);
+  $("terlaris").innerHTML = `<h2>Barang terjual</h2>` + (rekap.length ? rekap.map(x =>
+    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
+  const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
   $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + (st.trx.length ? st.trx.map(t =>
-    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc(t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(NAMA_METODE[t.metode] || t.metode)}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
+    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
     : `<div class="kosong">Belum ada transaksi di tanggal ini.</div>`);
 }
+
+/* Excel dengan susunan yang sama seperti rekap harian admin:
+   judul tanggal, jumlah pembeli, tabel barang, daftar transfer, TOTAL TF, TOTAL CASH */
+const BULAN = ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"];
+function susunLaporan(){
+  const sah = st.trx.filter(t => !t.batal), [y, m, d] = $("tglLaporan").value.split("-");
+  const rekap = rekapBarang(sah), baris = [], gabung = [];
+  baris.push([`BULAN ${d} ${BULAN[Number(m) - 1]} ${y}`], [`JUMLAH PEMBELI : ${sah.length} ORANG`], ["", "NAMA PRODUCT", "QTY", "HARGA", "JUMLAH UANG"]);
+  gabung.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } });
+  rekap.forEach((x, i) => baris.push([i + 1, x.nama, x.qty, x.harga, x.uang]));
+  const total = rekap.reduce((a, x) => a + x.uang, 0);
+  baris.push(["", "", "", "", total]);
+  let tf = 0;
+  for (const t of sah.slice().reverse()) {
+    if (t.metode === "tunai") continue;
+    tf += Number(t.total);
+    gabung.push({ s: { r: baris.length, c: 2 }, e: { r: baris.length, c: 3 } });
+    baris.push(["", "", t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), "", Number(t.total)]);
+  }
+  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL TF", "", "", "", tf]);
+  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL CASH", "", "", "", total - tf]);
+  return { baris, gabung };
+}
+$("eksporLaporan").onclick = async () => {
+  if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
+  const tombol = $("eksporLaporan"); tombol.disabled = true;
+  try {
+    await muatPustakaExcel();
+    const { baris, gabung } = susunLaporan(), ws = XLSX.utils.aoa_to_sheet(baris);
+    ws["!merges"] = gabung; ws["!cols"] = [{ wch: 4 }, { wch: 38 }, { wch: 8 }, { wch: 12 }, { wch: 14 }];
+    for (let r = 3; r < baris.length; r++) for (const c of [3, 4]) { const sel = ws[XLSX.utils.encode_cell({ r, c })]; if (sel && sel.t === "n") sel.z = "#,##0"; }
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Penjualan");
+    XLSX.writeFile(wb, "penjualan-" + $("tglLaporan").value + ".xlsx");
+  } catch (e) { roti(pesan(e), true); }
+  finally { tombol.disabled = false; }
+};
 $("tglLaporan").onchange = muatLaporan; $("muatLaporan").onclick = muatLaporan;
 $("daftarTrx").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (!b) return; const t = st.trx.find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false); });
 
@@ -876,7 +977,7 @@ function gambarBarang(){
     const h = hargaDari(it.kunci), s = stokDari(it.kunci);
     return `<div class="edit-brs" data-k="${esc(it.kunci)}"><div class="nm">${esc(it.nama)}<small>${esc(it.ukuran || "Satuan")} <span class="ket-simpan"></span></small></div>
       <input class="f-harga angka" inputmode="numeric" autocomplete="off" placeholder="0" value="${h ? ribuan(h) : ""}" aria-label="Harga ${esc(it.nama)} ${esc(it.ukuran)}">
-      <input class="f-stok angka" inputmode="numeric" autocomplete="off" placeholder="-" value="${s === null ? "" : s}" aria-label="Stok ${esc(it.nama)} ${esc(it.ukuran)}"></div>`;
+      <input class="f-stok angka" inputmode="decimal" autocomplete="off" placeholder="-" value="${s === null ? "" : fq(s)}" aria-label="Stok ${esc(it.nama)} ${esc(it.ukuran)}"></div>`;
   }).join("") : `<div class="kosong">Tidak ada barang yang cocok.</div>`;
   $("lebihBarang").hidden = hasil.length <= st.tampilBarang;
 }
@@ -889,12 +990,12 @@ $("saringBarang").addEventListener("click", e => {
   $("saringBarang").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c === b)));
   gambarBarang();
 });
-$("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harga")) { const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : ""; } else if (e.target.matches(".f-stok")) e.target.value = e.target.value.replace(/\D/g, ""); });
+$("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harga")) { const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : ""; } else if (e.target.matches(".f-stok")) e.target.value = e.target.value.replace(/[^\d.,]/g, ""); });
 $("daftarBarang").addEventListener("change", async e => {
   const brs = e.target.closest(".edit-brs"); if (!brs) return;
   const it = petaItem.get(brs.dataset.k), ket = brs.querySelector(".ket-simpan");
   const harga = angkaDari(brs.querySelector(".f-harga").value), stokTeks = brs.querySelector(".f-stok").value.trim();
-  const stok = stokTeks === "" ? null : Math.min(angkaDari(stokTeks), 2000000000);
+  const stok = stokTeks === "" ? null : Math.min(desimalDari(stokTeks), 2000000000);
   ket.className = "ket-simpan"; ket.textContent = "menyimpan…";
   const { error } = await sb.from("barang").upsert({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
   if (error) { ket.className = "ket-simpan gagal"; ket.textContent = "gagal: " + pesan(error); return; }
@@ -902,6 +1003,15 @@ $("daftarBarang").addEventListener("change", async e => {
   ket.className = "ket-simpan ok"; ket.textContent = "tersimpan";
   gambarKemajuan();
 });
+
+$("simpanRekening").onclick = async () => {
+  const daftar = [...new Set($("daftarRekening").value.split("\n").map(x => x.trim().slice(0, 60)).filter(Boolean))].slice(0, 20);
+  const status = $("statusRekening"); status.textContent = "Menyimpan…";
+  const { error } = await sb.from("pengaturan").upsert({ kunci: "rekening", nilai: daftar });
+  if (error) { status.textContent = "Gagal: " + pesan(error); return; }
+  try { await muatRekening(); } catch (e) {}
+  status.textContent = "Tersimpan. " + daftar.length + " rekening.";
+};
 
 /* ---------- isi massal lewat Excel ---------- */
 let pustakaExcel;
@@ -940,7 +1050,7 @@ $("berkasExcel").onchange = async e => {
       const hTeks = String(kolom(b, "harga")).trim(), sTeks = String(kolom(b, "stok")).trim();
       if (hTeks === "" && sTeks === "") continue;
       const harga = Math.max(0, Math.round(Number(hTeks.replace(/[^\d.,-]/g, "").replace(/[.,](?=\d{3}(\D|$))/g, "").replace(",", ".")) || 0));
-      const stok = sTeks === "" ? null : Math.max(0, Math.min(2000000000, Math.round(Number(sTeks.replace(/[^\d-]/g, "")) || 0)));
+      const stok = sTeks === "" ? null : Math.max(0, Math.min(2000000000, typeof kolom(b, "stok") === "number" ? Math.round(kolom(b, "stok") * 100) / 100 : desimalDari(sTeks)));
       const lama = barang.get(it.kunci);
       if (lama && lama.harga === harga && lama.stok === stok) continue;
       kirim.push({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
@@ -961,31 +1071,38 @@ $("berkasExcel").onchange = async e => {
    KARYAWAN (admin)
    ========================================================= */
 async function hitungTunggu(){
-  const { count } = await sb.from("profil").select("id", { count: "exact", head: true }).eq("aktif", false);
+  const { count } = await sb.from("profil").select("id", { count: "exact", head: true }).eq("aktif", false).eq("dihapus", false);
   const el = $("titikTunggu"); el.hidden = !count; el.textContent = count || "";
 }
+const MAKS_ADMIN = 3;
 async function muatKaryawan(){
   const el = $("daftarKaryawan"); el.innerHTML = `<div class="kosong">Memuat…</div>`;
   const { data, error } = await sb.from("profil").select("*").order("dibuat", { ascending: true });
   if (error) { el.innerHTML = `<div class="kosong"><h3>Gagal memuat</h3><p>${esc(pesan(error))}</p></div>`; return; }
-  const urut = data.slice().sort((a, b) => Number(a.aktif) - Number(b.aktif));
-  el.innerHTML = urut.map(p => {
-    const saya = p.id === profil.id;
-    const cap = p.peran === "admin" ? `<span class="cap emas">Admin</span>` : p.aktif ? `<span class="cap">Aktif</span>` : `<span class="cap merah">Menunggu</span>`;
-    const aksi = saya ? "" : p.aktif ? `<button class="btn kecil bahaya" data-id="${esc(p.id)}" data-aktif="0">Nonaktifkan</button>` : `<button class="btn kecil utama" data-id="${esc(p.id)}" data-aktif="1">Setujui</button>`;
-    return `<div class="brs"><div class="kiri"><b>${esc(p.nama)}${saya ? " (Anda)" : ""}</b><small>${esc(p.email)}</small></div>${cap}${aksi}</div>`;
-  }).join("") || `<div class="kosong">Belum ada akun.</div>`;
-  const tunggu = data.filter(p => !p.aktif).length; $("titikTunggu").hidden = !tunggu; $("titikTunggu").textContent = tunggu || "";
+  const tunggu = data.filter(p => !p.aktif && !p.dihapus), aktif = data.filter(p => p.aktif).sort((a, b) => String(a.kode).localeCompare(String(b.kode))), hapus = data.filter(p => p.dihapus);
+  const jmlAdmin = aktif.filter(p => p.peran === "admin").length, penuh = jmlAdmin >= MAKS_ADMIN;
+  $("slotAkun").textContent = `Admin ${jmlAdmin} dari ${MAKS_ADMIN} · Karyawan ${aktif.filter(p => p.peran === "karyawan").length} · Menunggu ${tunggu.length}`;
+  const tombolSetuju = (p, utama) => `<button class="btn kecil${utama === "karyawan" ? " utama" : ""}" data-aksi="setuju" data-peran="karyawan" data-id="${esc(p.id)}">Jadikan karyawan</button>` +
+    (penuh ? "" : `<button class="btn kecil${utama === "admin" ? " utama" : ""}" data-aksi="setuju" data-peran="admin" data-id="${esc(p.id)}">Jadikan admin</button>`);
+  let html = "";
+  if (tunggu.length) html += `<div class="sub-judul">Menunggu persetujuan</div>` + tunggu.map(p =>
+    `<div class="brs tumpuk"><div class="kiri"><b>${esc(p.nama)}</b><small>${esc(p.email)} · minta jadi ${p.minta === "admin" ? "admin" : "karyawan"}</small></div><div class="aksi-akun">${tombolSetuju(p, p.minta === "admin" && !penuh ? "admin" : "karyawan")}<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc(p.nama)}">Tolak</button></div></div>`).join("");
+  html += `<div class="sub-judul">Akun aktif</div>` + aktif.map(p =>
+    `<div class="brs"><span class="kode">${esc(p.kode || "-")}</span><div class="kiri"><b>${esc(p.nama)}${p.id === profil.id ? " (Anda)" : ""}</b><small>${esc(p.email)} · ${esc(NAMA_PERAN[p.peran] || p.peran)}</small></div>${p.peran === "pemilik" ? "" : `<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc((p.kode || "") + " " + p.nama)}">Hapus akun</button>`}</div>`).join("");
+  if (hapus.length) html += `<div class="sub-judul">Akun dihapus</div>` + hapus.map(p =>
+    `<div class="brs tumpuk"><div class="kiri"><b>${esc(p.nama)}</b><small>${esc(p.email)}${p.kode_lama ? " · dulu " + esc(p.kode_lama) : ""}</small></div><div class="aksi-akun">${tombolSetuju(p, "")}</div></div>`).join("");
+  el.innerHTML = html;
+  $("titikTunggu").hidden = !tunggu.length; $("titikTunggu").textContent = tunggu.length || "";
 }
 $("muatKaryawan").onclick = muatKaryawan;
 $("daftarKaryawan").addEventListener("click", async e => {
-  const b = e.target.closest("button[data-id]"); if (!b) return;
-  const aktif = b.dataset.aktif === "1";
-  if (!aktif && !confirm("Nonaktifkan akun ini? Dia tidak bisa memakai kasir sampai diaktifkan lagi.")) return;
+  const b = e.target.closest("button[data-aksi]"); if (!b) return;
+  const hapus = b.dataset.aksi === "hapus";
+  if (hapus && !confirm(`Hapus akun ${b.dataset.nama.trim()}?\n\nDia tidak bisa memakai kasir lagi dan nomor ID-nya dilepas untuk orang baru. Riwayat penjualannya tetap tersimpan.`)) return;
   b.disabled = true;
-  const { error } = await sb.from("profil").update({ aktif }).eq("id", b.dataset.id);
+  const { data, error } = hapus ? await sb.rpc("hapus_akun", { p_id: b.dataset.id }) : await sb.rpc("setujui_akun", { p_id: b.dataset.id, p_peran: b.dataset.peran });
   if (error) { roti(pesan(error), true); b.disabled = false; return; }
-  roti(aktif ? "Akun diaktifkan." : "Akun dinonaktifkan."); muatKaryawan();
+  roti(hapus ? "Akun dihapus, ID dilepas." : `Akun aktif dengan ID ${data.kode}.`); muatKaryawan();
 });
 
 /* =========================================================
