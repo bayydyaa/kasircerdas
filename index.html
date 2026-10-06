@@ -244,12 +244,14 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
 .dlg-aksi{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .struk{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;color:#000;background:#fff;border:1px dashed var(--garis);border-radius:10px;padding:14px}
 .struk .tengah{text-align:center}
+.struk-logo{width:56px;height:56px;object-fit:contain;border-radius:10px;display:inline-block;margin-bottom:4px}
 .struk .tebal{font-weight:700}
 .struk hr{border:0;border-top:1px dashed #000;margin:8px 0}
 .struk .dua-sisi{display:flex;justify-content:space-between;gap:10px}
 .struk .dua-sisi span:last-child{text-align:end;white-space:nowrap}
 .struk .batal-cap{border:2px solid #000;padding:2px 8px;display:inline-block;font-weight:700;margin-top:6px}
-.wa-baris{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}
+.pita-ubah{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:14px;background:var(--emas-lunak);border:1px solid #ecd9a8;color:#5c4104;font-weight:700;font-size:.92rem}
+.pita-ubah span{flex:1}
 #roti{position:fixed;z-index:100;left:50%;bottom:calc(var(--nav-b) + var(--aman-b) + 84px);transform:translate(-50%,20px);max-width:calc(100vw - 32px);background:#1c2a22;color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center}
 #roti.tampil{opacity:1;transform:translate(-50%,0)}
 #roti.merah{background:var(--merah)}
@@ -344,6 +346,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
     <section id="hal-kasir">
       <div class="kasir-tata">
         <div>
+          <div class="pita-ubah" id="pitaUbah" hidden><span id="teksUbah"></span><button class="btn kecil" id="batalUbah">Batal ubah</button></div>
           <div class="alat">
             <div class="cari">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.500-3.500"/></svg>
@@ -455,15 +458,13 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
 <dialog id="dlgStruk" aria-label="Struk">
   <div class="dlg-isi">
     <div id="isiStruk"></div>
-    <div class="wa-baris">
-      <input class="isian" id="nomorWa" inputmode="tel" autocomplete="off" placeholder="No. WA pembeli" aria-label="Nomor WhatsApp pembeli">
-      <button class="btn" id="kirimWa">Kirim WA</button>
-    </div>
     <div class="dlg-aksi">
+      <button class="btn" id="kirimWa">Kirim foto</button>
       <button class="btn" id="cetakStruk">Cetak struk</button>
-      <button class="btn utama" id="tutupStruk">Selesai</button>
     </div>
-    <button class="btn bahaya penuh kecil" id="batalTrx" style="margin-top:10px" hidden>Batalkan transaksi ini</button>
+    <button class="btn utama penuh" id="tutupStruk" style="margin-top:8px">Selesai</button>
+    <button class="btn penuh kecil" id="ubahTrx" style="margin-top:10px" hidden>Ubah transaksi ini</button>
+    <button class="btn bahaya penuh kecil" id="batalTrx" style="margin-top:8px" hidden>Batalkan transaksi ini</button>
   </div>
 </dialog>
 
@@ -520,7 +521,7 @@ function pesan(e){
   if (/valid email|invalid format/i.test(m)) return "Format email tidak benar.";
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
-  if (/pastikan_profil|buat_transaksi|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
+  if (/pastikan_profil|buat_transaksi|ubah_transaksi|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
   return m || "Terjadi kesalahan.";
 }
 
@@ -651,7 +652,7 @@ $("cekLagi").onclick = async () => {
 };
 async function keluar(){
   try { await sb.auth.signOut(); } catch (e) {}
-  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = [];
+  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.ubah = null; aturPitaUbah();
   document.body.classList.remove("kr-buka");
   aturMode(false); tampilLayar("layarMasuk");
 }
@@ -827,15 +828,31 @@ $("isiKr").addEventListener("click", e => {
     b.tipe = t.dataset.t; gambarKeranjang();
   }
 });
+/* Mengetik jumlah atau harga TIDAK menggambar ulang keranjang (cukup angka di baris itu yang diperbarui),
+   supaya kolom yang baru saja ditekan tidak kehilangan fokus. */
 $("isiKr").addEventListener("input", e => {
-  if (!e.target.matches(".f-hrg")) return;
-  const brs = e.target.closest(".kr-item"), b = keranjang.get(brs.dataset.k), n = angkaDari(e.target.value);
-  e.target.value = n ? ribuan(n) : ""; b.harga = n;
-  e.target.classList.toggle("wajib", !n);
+  const brs = e.target.closest(".kr-item"); if (!brs) return;
+  const b = keranjang.get(brs.dataset.k); if (!b) return;
+  if (e.target.matches(".f-hrg")) {
+    const n = angkaDari(e.target.value);
+    e.target.value = n ? ribuan(n) : ""; b.harga = n;
+    e.target.classList.toggle("wajib", !n);
+  } else if (e.target.matches(".f-qty")) {
+    const q = desimalDari(e.target.value); if (!(q > 0)) return;
+    b.qty = Math.min(99999, q);
+  } else return;
   brs.querySelector(".sub").textContent = rp(subBaris(b));
   hitungBayar(); perbaruiBar();
 });
-$("isiKr").addEventListener("change", e => { if (e.target.matches(".f-qty")) ubahQty(e.target.closest(".kr-item").dataset.k, desimalDari(e.target.value)); });
+$("isiKr").addEventListener("change", e => {
+  if (!e.target.matches(".f-qty")) return;
+  const brs = e.target.closest(".kr-item"), b = brs && keranjang.get(brs.dataset.k); if (!b) return;
+  const q = desimalDari(e.target.value);
+  if (q > 0) b.qty = Math.min(99999, q);          // jumlah 0 atau kosong: kembali ke angka sebelumnya (pakai Hapus untuk membuang)
+  e.target.value = fq(b.qty);
+  brs.querySelector(".sub").textContent = rp(subBaris(b));
+  hitungBayar(); perbaruiBar(); if (st.hal === "kasir") gambarKasir();
+});
 $("kosongkanKr").onclick = () => { if (confirm("Kosongkan keranjang?")) { keranjang.clear(); gambarKeranjang(); gambarKasir(); } };
 
 function perbaruiBar(){
@@ -866,17 +883,50 @@ $("simpanTrx").onclick = async () => {
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
     const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
-    const { data, error } = await sb.rpc("buat_transaksi", { p_item: item, p_metode: metode(), p_bayar: totalKeranjang(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" });
+    const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" };
+    const ubah = st.ubah;
+    const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umum }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang() });
     if (error) throw error;
+    if (ubah) { const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data; }
+    st.ubah = null; aturPitaUbah();
     keranjang.clear(); $("pembeli").value = "";
     document.querySelector('input[name="metode"][value="tunai"]').checked = true;
     try { await muatBarang(); } catch (e) {}
     gambarKeranjang(); gambarKasir();
-    bukaStruk(data, true);
+    bukaStruk(data, !ubah);
+    if (ubah) roti("Perubahan disimpan.");
   } catch (e) {
     galat.textContent = pesan(e);
     try { await muatBarang(); gambarKasir(); } catch (x) {}
-  } finally { tombol.textContent = "Simpan transaksi"; hitungBayar(); }
+  } finally { aturPitaUbah(); hitungBayar(); }
+};
+
+/* ---------- mode ubah transaksi (hanya pemilik) ---------- */
+function aturPitaUbah(){
+  $("pitaUbah").hidden = !st.ubah;
+  if (st.ubah) $("teksUbah").textContent = "Sedang mengubah " + st.ubah.nomor;
+  $("judulKr").textContent = st.ubah ? "Ubah " + st.ubah.nomor : "Keranjang";
+  $("simpanTrx").textContent = st.ubah ? "Simpan perubahan" : "Simpan transaksi";
+}
+function mulaiUbah(t){
+  if (keranjang.size && !confirm("Isi keranjang sekarang akan diganti dengan isi transaksi " + t.nomor + ". Lanjutkan?")) return;
+  keranjang.clear();
+  for (const i of (t.item || [])) {
+    const tipe = i.tipe === "partai" ? "partai" : "ecer";
+    keranjang.set(keranjang.has(i.kunci) ? i.kunci + "::" + tipe : i.kunci, { kunci: i.kunci, nama: i.nama, ukuran: i.ukuran || "", qty: Number(i.qty) || 0, harga: Number(i.harga) || 0, tipe });
+  }
+  const m = t.metode === "tunai" ? "tunai" : "transfer";
+  document.querySelector(`input[name="metode"][value="${m}"]`).checked = true;
+  if (t.rekening && REKENING.includes(t.rekening)) $("rekening").value = t.rekening;
+  $("pembeli").value = t.pembeli || "";
+  st.ubah = { id: t.id, nomor: t.nomor || "#" + t.id };
+  $("dlgStruk").close(); bukaHal("kasir"); aturPitaUbah(); gambarKeranjang();
+  if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
+}
+$("batalUbah").onclick = () => {
+  st.ubah = null; keranjang.clear(); $("pembeli").value = "";
+  document.querySelector('input[name="metode"][value="tunai"]').checked = true;
+  aturPitaUbah(); gambarKeranjang(); gambarKasir(); roti("Batal mengubah. Transaksi tidak berubah.");
 };
 
 /* =========================================================
@@ -889,6 +939,7 @@ const jumlahItem = i => i.jumlah != null ? Number(i.jumlah) : Math.round(Number(
 function htmlStruk(t){
   const brs = (a, b) => `<div class="dua-sisi"><span>${esc(a)}</span><span>${esc(b)}</span></div>`;
   return `<div class="struk">
+    <div class="tengah"><img class="struk-logo" src="${esc(ALAMAT_KATALOG)}apple-touch-icon.png" alt="" onerror="this.remove()"></div>
     <div class="tengah tebal">${esc(TOKO.nama)}</div>
     <div class="tengah">${esc(TOKO.alamat)}</div>
     <div class="tengah">WA ${esc(TOKO.telp)}</div>
@@ -896,30 +947,105 @@ function htmlStruk(t){
     <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
     <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}${i.tipe === "partai" ? " (partai)" : ""}</div>${brs("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)))}`).join("")}
     <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${Number(t.kembali) > 0 ? brs("Kembali", rp(t.kembali)) : ""}
+    ${t.diubah_oleh ? `<div class="tengah" style="font-size:.9em">Diubah oleh ${esc(t.diubah_oleh)}, ${esc(waktuTeks(t.diubah_waktu))}</div>` : ""}
     <hr><div class="tengah">Terima kasih sudah berbelanja</div></div>`;
 }
-function teksStruk(t){
-  const g = "--------------------------------";
-  return [`*${TOKO.nama}*`, TOKO.alamat, g, `No: ${t.nomor || "#" + t.id}`, `Waktu: ${waktuTeks(t.waktu)}`, `Kasir: ${t.kasir_kode ? t.kasir_kode + " " : ""}${t.kasir_nama}`, g,
-    ...(t.item || []).map(i => `${i.nama}${i.ukuran ? " " + i.ukuran : ""}${i.tipe === "partai" ? " (partai)" : ""}\n  ${fq(i.qty)} x ${ribuan(i.harga)} = ${ribuan(jumlahItem(i))}`),
-    g, `*TOTAL: ${rp(t.total)}*`, `${NAMA_METODE[t.metode] || t.metode}${t.rekening ? " ke " + t.rekening : ""}: ${rp(t.bayar)}`, ...(Number(t.kembali) > 0 ? [`Kembali: ${rp(t.kembali)}`] : []), g, "Terima kasih sudah berbelanja."].join("\n");
+/* ---------- foto struk (PNG) untuk dikirim lewat WhatsApp ---------- */
+let logoStruk;
+const muatLogoStruk = () => logoStruk || (logoStruk = new Promise(ok => {
+  const g = new Image(); g.crossOrigin = "anonymous";
+  g.onload = () => ok(g); g.onerror = () => ok(null);
+  g.src = ALAMAT_KATALOG + "apple-touch-icon.png";
+  setTimeout(() => ok(null), 4000);
+}));
+async function fotoStruk(t, pakaiLogo = true){
+  const logo = pakaiLogo ? await muatLogoStruk() : null;
+  const S = 2, W = 380, P = 22, LH = 21, UKURAN_LOGO = 64, lebarIsi = W - P * 2;
+  const huruf = tebal => (tebal ? "700 " : "400 ") + "14px ui-monospace, 'SF Mono', Menlo, Consolas, 'Courier New', monospace";
+  const kanvas = document.createElement("canvas"), c = kanvas.getContext("2d");
+  const pecah = (teks, tebal, lebar) => {       // bungkus teks panjang jadi beberapa baris
+    c.font = huruf(tebal); const hasil = []; let baris = "";
+    for (const kata of String(teks).split(" ")) {
+      const coba = baris ? baris + " " + kata : kata;
+      if (c.measureText(coba).width <= lebar || !baris) baris = coba; else { hasil.push(baris); baris = kata; }
+    }
+    hasil.push(baris); return hasil;
+  };
+  const brs = [];                               // {j: "t"engah | "k"iri | "d"ua sisi | "g"aris, a, b, tebal}
+  const tengah = (a, tebal) => pecah(a, tebal, lebarIsi).forEach(x => brs.push({ j: "t", a: x, tebal }));
+  const dua = (a, b, tebal) => {
+    c.font = huruf(tebal); const sisa = lebarIsi - c.measureText(b).width - 12, kiri = pecah(a, tebal, sisa);
+    kiri.forEach((x, i) => brs.push(i === kiri.length - 1 ? { j: "d", a: x, b, tebal } : { j: "k", a: x, tebal }));
+  };
+  const garis = () => brs.push({ j: "g" });
+  tengah(TOKO.nama, true); tengah(TOKO.alamat); tengah("WA " + TOKO.telp);
+  if (t.batal) tengah("*** DIBATALKAN ***", true);
+  garis(); dua("No.", t.nomor || "#" + t.id); dua("Waktu", waktuTeks(t.waktu)); dua("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama);
+  if (t.pembeli) dua("Pembeli", t.pembeli);
+  garis();
+  for (const i of (t.item || [])) {
+    pecah(i.nama + (i.ukuran ? " " + i.ukuran : "") + (i.tipe === "partai" ? " (partai)" : ""), false, lebarIsi).forEach(x => brs.push({ j: "k", a: x }));
+    dua("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)));
+  }
+  garis(); dua("TOTAL", rp(t.total), true);
+  dua((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar));
+  if (Number(t.kembali) > 0) dua("Kembali", rp(t.kembali));
+  if (t.diubah_oleh) tengah("Diubah oleh " + t.diubah_oleh);
+  garis(); tengah("Terima kasih sudah berbelanja");
+
+  const atas = P + (logo ? UKURAN_LOGO + 10 : 0), H = atas + brs.length * LH + P;
+  kanvas.width = W * S; kanvas.height = H * S; c.scale(S, S);
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
+  if (logo) c.drawImage(logo, (W - UKURAN_LOGO) / 2, P, UKURAN_LOGO, UKURAN_LOGO);
+  c.fillStyle = "#000"; c.textBaseline = "middle";
+  brs.forEach((b, n) => {
+    const y = atas + n * LH + LH / 2;
+    if (b.j === "g") { c.save(); c.setLineDash([4, 3]); c.lineWidth = 1; c.beginPath(); c.moveTo(P, y); c.lineTo(W - P, y); c.stroke(); c.restore(); return; }
+    c.font = huruf(b.tebal);
+    if (b.j === "t") { c.textAlign = "center"; c.fillText(b.a, W / 2, y); return; }
+    c.textAlign = "left"; c.fillText(b.a, P, y);
+    if (b.j === "d") { c.textAlign = "right"; c.fillText(b.b, W - P, y); }
+  });
+  return new Promise((ok, gagal) => { try { kanvas.toBlob(b => b ? ok(b) : gagal(new Error("Gagal membuat foto struk.")), "image/png"); } catch (e) { gagal(e); } });
+}
+/* disiapkan begitu struk dibuka, supaya saat tombol ditekan lembar bagikan langsung muncul */
+function siapkanFoto(t){
+  st.fileStruk = null;
+  st.fotoSiap = fotoStruk(t).catch(() => fotoStruk(t, false))
+    .then(blob => { const f = new File([blob], "struk-" + String(t.nomor || t.id).replace(/[^\w-]/g, "") + ".png", { type: "image/png" }); if (st.struk === t) st.fileStruk = f; return f; })
+    .catch(() => null);
 }
 function bukaStruk(t, baru){
   st.struk = t;
   $("isiStruk").innerHTML = htmlStruk(t);
-  $("nomorWa").value = "";
+  siapkanFoto(t);
   $("tutupStruk").textContent = baru ? "Selesai" : "Tutup";
-  $("batalTrx").hidden = !(adalahAdmin() && !t.batal && !baru);
+  /* hanya pemilik yang boleh mengubah atau membatalkan */
+  $("batalTrx").hidden = $("ubahTrx").hidden = !(adalahPemilik() && !t.batal && !baru);
   const d = $("dlgStruk"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
 $("tutupStruk").onclick = () => $("dlgStruk").close();
-$("cetakStruk").onclick = () => { $("areaCetak").innerHTML = htmlStruk(st.struk); window.print(); };
-$("kirimWa").onclick = () => {
-  let no = $("nomorWa").value.replace(/\D/g, "");
-  if (no.startsWith("0")) no = "62" + no.slice(1); else if (no.startsWith("8")) no = "62" + no;
-  if (no && no.length < 10) { roti("Nomor WA terlalu pendek.", true); return; }
-  window.open("https://wa.me/" + no + "?text=" + encodeURIComponent(teksStruk(st.struk)), "_blank", "noopener");
+$("cetakStruk").onclick = async () => {
+  $("areaCetak").innerHTML = htmlStruk(st.struk);
+  /* tunggu logo siap dulu supaya ikut tercetak */
+  const g = $("areaCetak").querySelector("img");
+  if (g && !g.complete) await new Promise(ok => { g.onload = g.onerror = ok; setTimeout(ok, 1500); });
+  window.print();
 };
+$("kirimWa").onclick = async () => {
+  const f = st.fileStruk || await st.fotoSiap;
+  if (!f) { roti("Foto struk gagal dibuat. Coba lagi.", true); return; }
+  if (navigator.canShare && navigator.canShare({ files: [f] })) {
+    try { await navigator.share({ files: [f] }); return; }
+    catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  /* perangkat tanpa menu bagikan (kebanyakan laptop): unduh fotonya */
+  const url = URL.createObjectURL(f), a = document.createElement("a");
+  a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  roti("Foto struk diunduh. Kirim lewat WhatsApp dari file itu.");
+};
+$("ubahTrx").onclick = () => mulaiUbah(st.struk);
 $("batalTrx").onclick = async () => {
   const t = st.struk;
   if (!confirm(`Batalkan transaksi ${t.nomor}? Transaksi ini tidak akan dihitung di laporan.`)) return;
@@ -970,47 +1096,94 @@ function gambarLaporan(){
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
   const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
   $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + (st.trx.length ? st.trx.map(t =>
-    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
+    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
     : `<div class="kosong">Belum ada transaksi di tanggal ini.</div>`);
 }
 
 /* Excel dengan susunan yang sama seperti rekap harian admin:
    judul tanggal, jumlah pembeli, tabel barang, daftar transfer, TOTAL TF, TOTAL CASH */
 const BULAN = ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"];
+/* Gaya sel untuk Excel: 0 polos, 1 judul, 2 kepala tabel, 3 teks, 4 angka tengah, 5 uang,
+   6 label total, 7 uang total, 8 teks tengah, 9 kosong bergaris. Semua kecuali 0 dan 1 bergaris hitam penuh. */
 function susunLaporan(){
   const sah = st.trx.filter(t => !t.batal), [y, m, d] = $("tglLaporan").value.split("-");
-  const rekap = rekapBarang(sah), baris = [], gabung = [];
-  baris.push([`BULAN ${d} ${BULAN[Number(m) - 1]} ${y}`], [`JUMLAH PEMBELI : ${sah.length} ORANG`], ["", "NAMA PRODUCT", "QTY", "HARGA", "JUMLAH UANG", "KET"]);
-  gabung.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } });
-  rekap.forEach((x, i) => baris.push([i + 1, x.nama, x.qty, x.harga, x.uang, x.tipe === "partai" ? "PARTAI" : "ECER"]));
+  const rekap = rekapBarang(sah), sel = [], gabung = [];
+  const K = (v, g) => ({ v, g }), brs = () => sel.length + 1;                 // nomor baris Excel berikutnya
+  sel.push([K(`BULAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:F1");
+  sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:F2");
+  sel.push([K("NAMA PRODUCT", 2), K("", 2), K("QTY", 2), K("HARGA", 2), K("JUMLAH UANG", 2), K("KET", 2)]); gabung.push("A3:B3");
+  rekap.forEach((x, i) => sel.push([K(i + 1, 4), K(x.nama, 3), K(x.qty, 4), K(x.harga, 5), K(x.uang, 5), K(x.tipe === "partai" ? "PARTAI" : "ECER", 8)]));
   const total = rekap.reduce((a, x) => a + x.uang, 0);
-  baris.push(["", "", "", "", total]);
-  let tf = 0;
+  gabung.push(`A${brs()}:D${brs()}`); sel.push([K("", 9), K("", 9), K("", 9), K("", 9), K(total, 7), K("", 9)]);
+  let tf = 0; const awalTf = brs();
   for (const t of sah.slice().reverse()) {
     if (t.metode === "tunai") continue;
     tf += Number(t.total);
-    gabung.push({ s: { r: baris.length, c: 2 }, e: { r: baris.length, c: 3 } });
-    baris.push(["", "", t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), "", Number(t.total)]);
+    gabung.push(`C${brs()}:D${brs()}`);
+    sel.push([K("", 9), K("", 9), K(t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), 8), K("", 8), K(Number(t.total), 5), K("", 9)]);
   }
-  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL TF", "", "", "", tf]);
-  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL CASH", "", "", "", total - tf]);
+  if (brs() - awalTf > 0) gabung.push(`A${awalTf}:B${brs() - 1}`);            // blok kosong di kiri daftar transfer
   const partai = rekap.filter(x => x.tipe === "partai").reduce((a, x) => a + x.uang, 0);
-  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL ECER", "", "", "", total - partai]);
-  gabung.push({ s: { r: baris.length, c: 0 }, e: { r: baris.length, c: 3 } }); baris.push(["TOTAL PARTAI", "", "", "", partai]);
-  return { baris, gabung };
+  for (const [label, nilai] of [["TOTAL TF", tf], ["TOTAL CASH", total - tf], ["TOTAL ECER", total - partai], ["TOTAL PARTAI", partai]]) {
+    gabung.push(`A${brs()}:D${brs()}`); sel.push([K(label, 6), K("", 6), K("", 6), K("", 6), K(nilai, 7), K("", 9)]);
+  }
+  return { sel, gabung, baris: sel.map(r => r.map(c => c.v)) };
 }
-$("eksporLaporan").onclick = async () => {
+
+/* ---------- pembuat file .xlsx sendiri (tanpa pustaka), supaya garis tabel dan huruf tebal ikut tersimpan ---------- */
+const xmlAman = t => String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function lembarXml(sel, gabung, lebar){
+  const huruf = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const baris = sel.map((r, i) => `<row r="${i + 1}">` + r.map((c, k) => {
+    const ref = huruf[k] + (i + 1);
+    if (typeof c.v === "number" && Number.isFinite(c.v)) return `<c r="${ref}" s="${c.g}"><v>${c.v}</v></c>`;
+    if (c.v === "" || c.v == null) return `<c r="${ref}" s="${c.g}"/>`;
+    return `<c r="${ref}" s="${c.g}" t="inlineStr"><is><t xml:space="preserve">${xmlAman(c.v)}</t></is></c>`;
+  }).join("") + `</row>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${lebar.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols><sheetData>${baris}</sheetData>${gabung.length ? `<mergeCells count="${gabung.length}">${gabung.map(g => `<mergeCell ref="${g}"/>`).join("")}</mergeCells>` : ""}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+}
+const GAYA_XML = (() => {
+  const garis = `<border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border>`;
+  const xf = (font, border, fmt, rata) => `<xf numFmtId="${fmt}" fontId="${font}" fillId="0" borderId="${border}" xfId="0" applyFont="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="${rata}" vertical="center"/></xf>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="12"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>${garis}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="10"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>${xf(2, 0, 0, "left")}${xf(1, 1, 0, "center")}${xf(0, 1, 0, "left")}${xf(0, 1, 0, "center")}${xf(0, 1, 3, "right")}${xf(1, 1, 0, "center")}${xf(1, 1, 3, "right")}${xf(0, 1, 0, "center")}${xf(0, 1, 0, "left")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+})();
+/* zip tanpa kompresi: cukup untuk file kecil dan bisa dibuka Excel, WPS, Google Sheets */
+function buatZip(berkas){
+  const tabel = buatZip.tabel || (buatZip.tabel = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = tabel[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder(), bagian = [], pusat = []; let pos = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const [nama, isi] of berkas) {
+    const n = enc.encode(nama), d = enc.encode(isi), c = crc(d);
+    const lokal = new Uint8Array([0x50, 0x4B, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(d.length), ...u32(d.length), ...u16(n.length), ...u16(0)]);
+    pusat.push(new Uint8Array([0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(d.length), ...u32(d.length), ...u16(n.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(pos)]), n);
+    bagian.push(lokal, n, d); pos += lokal.length + n.length + d.length;
+  }
+  const ukuranPusat = pusat.reduce((a, b) => a + b.length, 0);
+  const akhir = new Uint8Array([0x50, 0x4B, 5, 6, ...u16(0), ...u16(0), ...u16(berkas.length), ...u16(berkas.length), ...u32(ukuranPusat), ...u32(pos), ...u16(0)]);
+  return new Blob([...bagian, ...pusat, akhir], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+function buatXlsxLaporan(){
+  const { sel, gabung } = susunLaporan();
+  return buatZip([
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Penjualan" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", GAYA_XML],
+    ["xl/worksheets/sheet1.xml", lembarXml(sel, gabung, [5, 40, 9, 13, 16, 10])],
+  ]);
+}
+$("eksporLaporan").onclick = () => {
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
-  const tombol = $("eksporLaporan"); tombol.disabled = true;
   try {
-    await muatPustakaExcel();
-    const { baris, gabung } = susunLaporan(), ws = XLSX.utils.aoa_to_sheet(baris);
-    ws["!merges"] = gabung; ws["!cols"] = [{ wch: 4 }, { wch: 38 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 9 }];
-    for (let r = 3; r < baris.length; r++) for (const c of [3, 4]) { const sel = ws[XLSX.utils.encode_cell({ r, c })]; if (sel && sel.t === "n") sel.z = "#,##0"; }
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Penjualan");
-    XLSX.writeFile(wb, "penjualan-" + $("tglLaporan").value + ".xlsx");
+    const url = URL.createObjectURL(buatXlsxLaporan()), a = document.createElement("a");
+    a.href = url; a.download = "penjualan-" + $("tglLaporan").value + ".xlsx";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (e) { roti(pesan(e), true); }
-  finally { tombol.disabled = false; }
 };
 $("tglLaporan").onchange = muatLaporan; $("muatLaporan").onclick = muatLaporan;
 $("daftarTrx").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (!b) return; const t = st.trx.find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false); });
