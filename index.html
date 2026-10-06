@@ -147,7 +147,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .total{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
 .total span{font-weight:700;color:var(--redup)}
 .total b{font-size:1.6rem;font-weight:800;color:var(--daun)}
-.segmen{display:grid;grid-template-columns:repeat(3,1fr);background:var(--lunak);border-radius:12px;padding:4px}
+.segmen{display:grid;grid-template-columns:repeat(2,1fr);background:var(--lunak);border-radius:12px;padding:4px}
 .segmen label{position:relative;display:grid;place-items:center;min-height:40px;border-radius:9px;font-weight:700;font-size:.9rem;color:var(--redup);cursor:pointer}
 .segmen input{position:absolute;opacity:0;inset:0}
 .segmen label:has(input:checked){background:var(--kertas);color:var(--daun);box-shadow:0 1px 4px rgba(15,61,36,.15)}
@@ -202,7 +202,7 @@ button.brs{width:100%;text-align:start}
 .kemajuan .batang{height:8px;border-radius:4px;background:var(--lunak);overflow:hidden;margin-top:8px}
 .kemajuan .batang i{display:block;height:100%;background:var(--hijau);border-radius:4px}
 .kemajuan .aksi{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.edit-brs{display:grid;grid-template-columns:1fr 124px 84px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--garis)}
+.edit-brs{display:grid;grid-template-columns:1fr 140px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--garis)}
 .edit-brs:first-child{border-top:0}
 .edit-brs .nm{font-weight:700;font-size:.9rem;line-height:1.25}
 .edit-brs .nm small{display:block;font-weight:500;color:var(--redup)}
@@ -210,7 +210,7 @@ button.brs{width:100%;text-align:start}
 .edit-brs .nm .gagal{color:var(--merah);font-weight:700}
 .edit-brs input{min-height:42px;padding:0 10px;border-radius:10px;border:1px solid var(--garis);width:100%;font-size:16px;text-align:end;background:var(--kertas)}
 .edit-brs input:focus{outline:none;border-color:var(--hijau);box-shadow:0 0 0 3px rgba(29,122,62,.18)}
-.edit-kepala{display:grid;grid-template-columns:1fr 124px 84px;gap:8px;padding:10px 14px;font-size:.78rem;font-weight:700;color:var(--redup);border-bottom:1px solid var(--garis)}
+.edit-kepala{display:grid;grid-template-columns:1fr 140px;gap:8px;padding:10px 14px;font-size:.78rem;font-weight:700;color:var(--redup);border-bottom:1px solid var(--garis)}
 .edit-kepala span:not(:first-child){text-align:end}
 
 .kode{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.76rem;font-weight:800;letter-spacing:.02em;background:var(--daun);color:#fff;font-variant-numeric:tabular-nums}
@@ -369,13 +369,6 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
             <div class="segmen" role="radiogroup" aria-label="Metode bayar">
               <label><input type="radio" name="metode" value="tunai" checked>Tunai</label>
               <label><input type="radio" name="metode" value="transfer">Transfer</label>
-              <label><input type="radio" name="metode" value="qris">QRIS</label>
-            </div>
-            <div id="areaTunai">
-              <label class="lbl" for="uang">Uang diterima</label>
-              <input class="isian angka" id="uang" inputmode="numeric" autocomplete="off" placeholder="0">
-              <div class="cepat" id="cepat"></div>
-              <div class="kembali" id="barisKembali"><span id="lblKembali">Kembalian</span><b class="angka" id="kembali">Rp0</b></div>
             </div>
             <div id="areaRekening" hidden>
               <label class="lbl" for="rekening">Transfer ke rekening</label>
@@ -407,11 +400,11 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
 
     <!-- ----- BARANG (admin) ----- -->
     <section id="hal-barang" hidden>
-      <div class="kepala-hal"><h1>Harga dan stok</h1></div>
+      <div class="kepala-hal"><h1>Harga acuan</h1></div>
       <div class="panel kemajuan">
         <b id="teksKemajuan"></b>
         <div class="batang"><i id="batangKemajuan" style="width:0"></i></div>
-        <p class="info" style="margin-top:10px">Harga di sini hanya harga acuan: muncul sebagai saran saat kasir memasukkan barang, dan kasir tetap bisa mengetik harga lain. Harga acuan ikut berubah mengikuti harga ecer terakhir yang dipakai. Stok dikosongkan artinya stok tidak dihitung.</p>
+        <p class="info" style="margin-top:10px">Harga di sini hanya harga acuan: muncul sebagai saran saat kasir memasukkan barang, dan kasir tetap bisa mengetik harga lain. Harga acuan ikut berubah mengikuti harga ecer terakhir yang dipakai.</p>
         <div class="aksi">
           <button class="btn kecil" id="unduhExcel">Unduh daftar (Excel)</button>
           <button class="btn kecil" id="unggahExcel">Unggah Excel yang sudah diisi</button>
@@ -427,12 +420,11 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="chip-rel" id="saringBarang">
           <button class="chip" data-s="semua" aria-pressed="true">Semua</button>
           <button class="chip" data-s="kosong" aria-pressed="false">Belum ada harga acuan</button>
-          <button class="chip" data-s="tipis" aria-pressed="false">Stok 5 ke bawah</button>
         </div>
         <div class="chip-rel" id="katBarang"></div>
       </div>
       <div class="panel">
-        <div class="edit-kepala"><span>Barang</span><span>Harga acuan</span><span>Stok</span></div>
+        <div class="edit-kepala"><span>Barang</span><span>Harga acuan</span></div>
         <div id="daftarBarang"></div>
       </div>
       <div class="lebih" id="lebihBarang" hidden><button class="btn">Tampilkan lebih banyak</button></div>
@@ -506,7 +498,7 @@ let sb = null, pengguna = null, profil = null;
 let ITEM = [];                         // semua barang jual: {kunci, nama, ukuran, kat, cari}
 const petaItem = new Map();            // kunci -> item
 const barang = new Map();              // kunci -> {harga, stok}
-const keranjang = new Map();           // kunci -> {nama, ukuran, qty, harga, tipe}
+const keranjang = new Map();           // id baris -> {kunci, nama, ukuran, qty, harga, tipe}; satu barang boleh 2 baris (ecer + partai)
 const st = { hal: "kasir", katKasir: -1, kataKasir: "", tampilKasir: PER_HALAMAN,
              katBarang: -1, kataBarang: "", saring: "semua", tampilBarang: PER_HALAMAN, trx: [], struk: null };
 
@@ -592,7 +584,7 @@ async function muatBarang(){
 }
 const hargaDari = k => (barang.get(k) || {}).harga || 0;          // harga ecer terakhir / acuan
 const partaiDari = k => (barang.get(k) || {}).partai || 0;        // harga partai terakhir
-const stokDari = k => { const b = barang.get(k); return b && b.stok != null ? b.stok : null; };
+
 
 /* =========================================================
    MASUK / DAFTAR
@@ -684,6 +676,8 @@ async function bukaAplikasi(){
   gambarChip("katBarang", "katBarang", gambarBarang);
   bukaHal("kasir"); gambarKeranjang();
   if (adalahPemilik()) hitungTunggu();
+  /* stok tidak dipakai lagi: kosongkan sisa angka stok lama supaya tidak ada penjualan yang tertolak */
+  if (admin) sb.from("barang").update({ stok: null }).gte("stok", -1000000000).then(() => {}, () => {});
 }
 
 async function muatRekening(){
@@ -746,12 +740,11 @@ function gambarKasir(){
   if (!hasil.length) { el.innerHTML = ""; tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri."); return; }
   $("kosongKasir").hidden = true;
   el.innerHTML = hasil.slice(0, st.tampilKasir).map(it => {
-    const stok = stokDari(it.kunci), b = keranjang.get(it.kunci), q = b ? b.qty : 0, habis = stok !== null && stok <= 0, h = hargaDari(it.kunci);
-    const ket = stok === null ? "" : habis ? "Habis" : "Stok " + fq(stok);
-    return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}"${habis ? " disabled" : ""}>
+    const q = barisDari(it.kunci).reduce((a, [, b]) => a + b.qty, 0), h = hargaDari(it.kunci);
+    return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}">
       <span class="nm">${esc(it.nama)}</span><span class="hg angka${h ? "" : " kosong-hg"}">${h ? rp(h) : "isi harga"}</span>
       <span class="uk">${esc(it.ukuran || "Satuan")}</span>
-      <span class="st angka${habis ? " habis" : stok !== null && stok <= 5 ? " tipis" : ""}">${ket}${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
+      <span class="st angka">${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
   }).join("");
   $("lebihKasir").hidden = hasil.length <= st.tampilKasir;
 }
@@ -760,26 +753,29 @@ $("cariKasir").addEventListener("input", e => { clearTimeout(jedaCari); jedaCari
 $("lebihKasir").onclick = () => { st.tampilKasir += PER_HALAMAN; gambarKasir(); };
 $("daftarKasir").addEventListener("click", e => {
   const b = e.target.closest(".barang"); if (!b || b.disabled) return;
-  const k = b.dataset.k, it = petaItem.get(k), ada = keranjang.get(k);
-  if (!ada) keranjang.set(k, { nama: it.nama, ukuran: it.ukuran, qty: 0, harga: hargaDari(k), tipe: "ecer" });
-  ubahQty(k, (ada ? ada.qty : 0) + 1);
+  const k = b.dataset.k, it = petaItem.get(k);
+  tambahKeKeranjang(k, it.nama, it.ukuran);
 });
-/* barang yang tidak ada di katalog: nama diketik sendiri, stok tidak dihitung */
+/* semua baris keranjang milik satu barang: [[idBaris, baris], ...] */
+const barisDari = kunci => [...keranjang].filter(([, b]) => b.kunci === kunci);
+function tambahKeKeranjang(kunci, nama, ukuran){
+  const ada = barisDari(kunci)[0];
+  if (ada) { ubahQty(ada[0], ada[1].qty + 1); return; }
+  keranjang.set(kunci, { kunci, nama, ukuran, qty: 0, harga: hargaDari(kunci), tipe: "ecer" });
+  ubahQty(kunci, 1);
+}
+/* barang yang tidak ada di katalog: nama diketik sendiri */
 $("tambahLain").onclick = () => {
   const nama = (prompt("Nama barang (tulis lengkap dengan ukurannya, mis. Paranet ecer 1 m):", $("cariKasir").value.trim()) || "").trim().replace(/\s+/g, " ").slice(0, 80);
   if (nama.length < 2) return;
-  const k = "lain|" + nama.toLowerCase(), ada = keranjang.get(k);
-  if (!ada) keranjang.set(k, { nama, ukuran: "", qty: 0, harga: hargaDari(k), tipe: "ecer" });
-  ubahQty(k, (ada ? ada.qty : 0) + 1);
+  tambahKeKeranjang("lain|" + nama.toLowerCase(), nama, "");
   if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
 };
 
-function ubahQty(kunci, qty){
-  const b = keranjang.get(kunci); if (!b) return;
+function ubahQty(id, qty){
+  const b = keranjang.get(id); if (!b) return;
   qty = Math.max(0, Math.min(99999, Math.round((Number(qty) || 0) * 100) / 100));
-  const stok = stokDari(kunci);
-  if (stok !== null && qty > stok) { qty = Math.max(0, stok); roti(`Stok ${b.nama}${b.ukuran ? " " + b.ukuran : ""} tinggal ${fq(stok)}.`, true); }
-  if (qty <= 0) keranjang.delete(kunci); else b.qty = qty;
+  if (qty <= 0) keranjang.delete(id); else b.qty = qty;
   gambarKeranjang(); if (st.hal === "kasir") gambarKasir();
 }
 const subBaris = b => Math.round(b.qty * (b.harga || 0));
@@ -793,26 +789,37 @@ function gambarKeranjang(){
     el.innerHTML = `<div class="kosong"><h3>Keranjang kosong</h3><p>Tekan barang di daftar untuk memasukkannya.</p></div>`;
     document.body.classList.remove("kr-buka");
   } else {
-    el.innerHTML = [...keranjang].map(([k, b]) =>
-      `<div class="kr-item" data-k="${esc(k)}">
-        <div><div class="nm">${esc(b.nama)}</div><div class="ket">${esc(b.ukuran || (k.startsWith("lain|") ? "Barang lain" : "Satuan"))}</div></div>
+    el.innerHTML = [...keranjang].map(([id, b]) => {
+      const dua = barisDari(b.kunci).length > 1;      // barang ini sudah dipisah jadi ecer + partai
+      return `<div class="kr-item" data-k="${esc(id)}">
+        <div><div class="nm">${esc(b.nama)}</div><div class="ket">${esc(b.ukuran || (b.kunci.startsWith("lain|") ? "Barang lain" : "Satuan"))}</div></div>
         <div class="sub angka">${rp(subBaris(b))}</div>
         <div class="baris-isi">
           <div class="qty"><button data-a="-1" aria-label="Kurangi">−</button><input class="f-qty" type="text" inputmode="decimal" autocomplete="off" value="${fq(b.qty)}" aria-label="Jumlah ${esc(b.nama)}"><button data-a="1" aria-label="Tambah">+</button></div>
           <input class="f-hrg angka${b.harga > 0 ? "" : " wajib"}" inputmode="numeric" autocomplete="off" placeholder="Harga satuan" value="${b.harga ? ribuan(b.harga) : ""}" aria-label="Harga satuan ${esc(b.nama)}">
         </div>
         <div class="baris-tipe">
-          <div class="tipe" role="group" aria-label="Jenis harga"><button data-t="ecer" aria-pressed="${b.tipe !== "partai"}">Ecer</button><button data-t="partai" aria-pressed="${b.tipe === "partai"}">Partai</button></div>
+          ${dua ? `<span class="cap${b.tipe === "partai" ? " emas" : ""}" style="padding:6px 12px;font-size:.82rem">${b.tipe === "partai" ? "Partai" : "Ecer"}</span>`
+                : `<div class="tipe" role="group" aria-label="Jenis harga"><button data-t="ecer" aria-pressed="${b.tipe !== "partai"}">Ecer</button><button data-t="partai" aria-pressed="${b.tipe === "partai"}">Partai</button></div>`}
+          ${dua ? "" : `<button class="tautan" data-pisah style="font-size:.85rem">+ Harga ${b.tipe === "partai" ? "ecer" : "partai"}</button>`}
           <span style="flex:1"></span>
           <button class="tautan" data-a="0" style="color:var(--merah);font-size:.85rem">Hapus</button>
-        </div></div>`).join("");
+        </div></div>`; }).join("");
   }
   hitungBayar(); perbaruiBar();
 }
 $("isiKr").addEventListener("click", e => {
   const brs = e.target.closest(".kr-item"); if (!brs) return;
-  const k = brs.dataset.k, b = keranjang.get(k), a = e.target.closest("button[data-a]"), t = e.target.closest("button[data-t]");
-  if (a) { const n = Number(a.dataset.a); ubahQty(k, n === 0 ? 0 : b.qty + n); }
+  const id = brs.dataset.k, b = keranjang.get(id), k = b.kunci, a = e.target.closest("button[data-a]"), t = e.target.closest("button[data-t]");
+  if (a) { const n = Number(a.dataset.a); ubahQty(id, n === 0 ? 0 : b.qty + n); }
+  else if (e.target.closest("button[data-pisah]")) {
+    /* satu pembeli, barang sama, sebagian ecer sebagian partai: tambah baris kedua dengan jenis sebaliknya,
+       ditaruh tepat di bawah baris pertama */
+    const tipe = b.tipe === "partai" ? "ecer" : "partai", baru = [];
+    for (const [i, x] of keranjang) { baru.push([i, x]); if (i === id) baru.push([k + "::" + tipe + Date.now(), { kunci: k, nama: b.nama, ukuran: b.ukuran, qty: 1, harga: tipe === "partai" ? partaiDari(k) : hargaDari(k), tipe }]); }
+    keranjang.clear(); baru.forEach(([i, x]) => keranjang.set(i, x));
+    gambarKeranjang(); if (st.hal === "kasir") gambarKasir();
+  }
   else if (t && b.tipe !== t.dataset.t) {
     /* ganti ecer/partai: kalau harga masih kosong atau masih saran lama, ganti ke saran jenis yang baru */
     const saranLama = b.tipe === "partai" ? partaiDari(k) : hargaDari(k), saranBaru = t.dataset.t === "partai" ? partaiDari(k) : hargaDari(k);
@@ -834,55 +841,41 @@ $("kosongkanKr").onclick = () => { if (confirm("Kosongkan keranjang?")) { keranj
 function perbaruiBar(){
   const tampil = st.hal === "kasir" && keranjang.size > 0;
   $("barKr").hidden = !tampil;
-  if (tampil) { $("barJumlah").textContent = keranjang.size + " jenis barang di keranjang"; $("barTotal").textContent = hargaLengkap() ? rp(totalKeranjang()) : "Isi harga dulu"; }
+  if (tampil) { $("barJumlah").textContent = new Set([...keranjang.values()].map(b => b.kunci)).size + " jenis barang di keranjang"; $("barTotal").textContent = hargaLengkap() ? rp(totalKeranjang()) : "Isi harga dulu"; }
 }
 $("barKr").onclick = () => document.body.classList.add("kr-buka");
 $("tutupKr").onclick = $("tirai").onclick = () => document.body.classList.remove("kr-buka");
 
 const metode = () => (document.querySelector('input[name="metode"]:checked') || {}).value || "tunai";
 function hitungBayar(){
-  const total = totalKeranjang(), tunai = metode() === "tunai", uang = angkaDari($("uang").value);
+  const total = totalKeranjang();
   $("totalKr").textContent = rp(total);
-  $("areaTunai").hidden = !tunai;
   $("areaRekening").hidden = !(metode() === "transfer" && REKENING.length);
-  if (tunai) {
-    const calon = new Set();
-    [5000, 10000, 20000, 50000, 100000].forEach(p => calon.add(Math.ceil(total / p) * p));
-    [50000, 100000].forEach(p => calon.add((Math.floor(total / p) + 1) * p));
-    const pilihan = [total].concat([...calon].filter(n => n > total).sort((x, y) => x - y).slice(0, 3));
-    $("cepat").innerHTML = pilihan.map((n, i) => `<button type="button" class="btn kecil angka" data-n="${n}">${i === 0 ? "Uang pas" : ribuan(n)}</button>`).join("");
-    const kurang = uang < total;
-    $("barisKembali").classList.toggle("kurang", kurang && uang > 0);
-    $("lblKembali").textContent = kurang && uang > 0 ? "Kurang" : "Kembalian";
-    $("kembali").textContent = rp(uang > 0 ? Math.abs(uang - total) : 0);
-  }
   const lengkap = hargaLengkap();
   const PETUNJUK = "Isi harga satuan semua barang dulu.", galat = $("galatBayar");
   if (keranjang.size && !lengkap) galat.textContent = PETUNJUK; else if (galat.textContent === PETUNJUK) galat.textContent = "";
-  $("simpanTrx").disabled = !keranjang.size || !lengkap || total <= 0 || (tunai && uang < total);
+  $("simpanTrx").disabled = !keranjang.size || !lengkap || total <= 0;
 }
-$("uang").addEventListener("input", e => { const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : ""; hitungBayar(); });
-$("cepat").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (b) { $("uang").value = ribuan(b.dataset.n); hitungBayar(); } });
 document.querySelectorAll('input[name="metode"]').forEach(r => r.addEventListener("change", hitungBayar));
 
 $("simpanTrx").onclick = async () => {
   const tombol = $("simpanTrx"), galat = $("galatBayar"); galat.textContent = "";
   /* jaring pengaman salah ketik: harga yang jauh dari harga terakhir harus dikonfirmasi */
-  const aneh = [...keranjang].filter(([k, b]) => { const lama = b.tipe === "partai" ? (partaiDari(k) || hargaDari(k)) : hargaDari(k); return lama > 0 && (b.harga > lama * 2 || b.harga < lama / 2); });
+  const aneh = [...keranjang].map(([, b]) => [b.kunci, b]).filter(([k, b]) => { const lama = b.tipe === "partai" ? (partaiDari(k) || hargaDari(k)) : hargaDari(k); return lama > 0 && (b.harga > lama * 2 || b.harga < lama / 2); });
   if (aneh.length && !confirm("Harga ini jauh berbeda dari harga terakhir:\n\n" + aneh.map(([k, b]) => `${b.nama}${b.ukuran ? " " + b.ukuran : ""}: ${rp(b.harga)} (terakhir ${rp(b.tipe === "partai" ? (partaiDari(k) || hargaDari(k)) : hargaDari(k))})`).join("\n") + "\n\nSudah benar?")) return;
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
-    const item = [...keranjang].map(([kunci, b]) => ({ kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
-    const { data, error } = await sb.rpc("buat_transaksi", { p_item: item, p_metode: metode(), p_bayar: angkaDari($("uang").value), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" });
+    const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
+    const { data, error } = await sb.rpc("buat_transaksi", { p_item: item, p_metode: metode(), p_bayar: totalKeranjang(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" });
     if (error) throw error;
-    keranjang.clear(); $("uang").value = ""; $("pembeli").value = "";
+    keranjang.clear(); $("pembeli").value = "";
     document.querySelector('input[name="metode"][value="tunai"]').checked = true;
     try { await muatBarang(); } catch (e) {}
     gambarKeranjang(); gambarKasir();
     bukaStruk(data, true);
   } catch (e) {
     galat.textContent = pesan(e);
-    try { await muatBarang(); gambarKasir(); } catch (x) {}    // stok mungkin baru berubah dari perangkat lain
+    try { await muatBarang(); gambarKasir(); } catch (x) {}
   } finally { tombol.textContent = "Simpan transaksi"; hitungBayar(); }
 };
 
@@ -902,14 +895,14 @@ function htmlStruk(t){
     ${t.batal ? `<div class="tengah"><span class="batal-cap">DIBATALKAN</span></div>` : ""}
     <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
     <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}${i.tipe === "partai" ? " (partai)" : ""}</div>${brs("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)))}`).join("")}
-    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${t.metode === "tunai" ? brs("Kembali", rp(t.kembali)) : ""}
+    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${Number(t.kembali) > 0 ? brs("Kembali", rp(t.kembali)) : ""}
     <hr><div class="tengah">Terima kasih sudah berbelanja</div></div>`;
 }
 function teksStruk(t){
   const g = "--------------------------------";
   return [`*${TOKO.nama}*`, TOKO.alamat, g, `No: ${t.nomor || "#" + t.id}`, `Waktu: ${waktuTeks(t.waktu)}`, `Kasir: ${t.kasir_kode ? t.kasir_kode + " " : ""}${t.kasir_nama}`, g,
     ...(t.item || []).map(i => `${i.nama}${i.ukuran ? " " + i.ukuran : ""}${i.tipe === "partai" ? " (partai)" : ""}\n  ${fq(i.qty)} x ${ribuan(i.harga)} = ${ribuan(jumlahItem(i))}`),
-    g, `*TOTAL: ${rp(t.total)}*`, `${NAMA_METODE[t.metode] || t.metode}${t.rekening ? " ke " + t.rekening : ""}: ${rp(t.bayar)}`, ...(t.metode === "tunai" ? [`Kembali: ${rp(t.kembali)}`] : []), g, "Terima kasih sudah berbelanja."].join("\n");
+    g, `*TOTAL: ${rp(t.total)}*`, `${NAMA_METODE[t.metode] || t.metode}${t.rekening ? " ke " + t.rekening : ""}: ${rp(t.bayar)}`, ...(Number(t.kembali) > 0 ? [`Kembali: ${rp(t.kembali)}`] : []), g, "Terima kasih sudah berbelanja."].join("\n");
 }
 function bukaStruk(t, baru){
   st.struk = t;
@@ -929,7 +922,7 @@ $("kirimWa").onclick = () => {
 };
 $("batalTrx").onclick = async () => {
   const t = st.struk;
-  if (!confirm(`Batalkan transaksi ${t.nomor}? Stok barangnya dikembalikan dan transaksi tidak dihitung di laporan.`)) return;
+  if (!confirm(`Batalkan transaksi ${t.nomor}? Transaksi ini tidak akan dihitung di laporan.`)) return;
   try {
     const { data, error } = await sb.rpc("batalkan_transaksi", { p_id: t.id });
     if (error) throw error;
@@ -1035,14 +1028,12 @@ function gambarBarang(){
   const hasil = ITEM.filter(it => {
     if (!cocok(it, st.katBarang, st.kataBarang)) return false;
     if (st.saring === "kosong") return hargaDari(it.kunci) <= 0;
-    if (st.saring === "tipis") { const s = stokDari(it.kunci); return s !== null && s <= 5; }
     return true;
   });
   $("daftarBarang").innerHTML = hasil.length ? hasil.slice(0, st.tampilBarang).map(it => {
-    const h = hargaDari(it.kunci), s = stokDari(it.kunci);
+    const h = hargaDari(it.kunci);
     return `<div class="edit-brs" data-k="${esc(it.kunci)}"><div class="nm">${esc(it.nama)}<small>${esc(it.ukuran || "Satuan")} <span class="ket-simpan"></span></small></div>
-      <input class="f-harga angka" inputmode="numeric" autocomplete="off" placeholder="0" value="${h ? ribuan(h) : ""}" aria-label="Harga ${esc(it.nama)} ${esc(it.ukuran)}">
-      <input class="f-stok angka" inputmode="decimal" autocomplete="off" placeholder="-" value="${s === null ? "" : fq(s)}" aria-label="Stok ${esc(it.nama)} ${esc(it.ukuran)}"></div>`;
+      <input class="f-harga angka" inputmode="numeric" autocomplete="off" placeholder="0" value="${h ? ribuan(h) : ""}" aria-label="Harga ${esc(it.nama)} ${esc(it.ukuran)}"></div>`;
   }).join("") : `<div class="kosong">Tidak ada barang yang cocok.</div>`;
   $("lebihBarang").hidden = hasil.length <= st.tampilBarang;
 }
@@ -1055,12 +1046,11 @@ $("saringBarang").addEventListener("click", e => {
   $("saringBarang").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c === b)));
   gambarBarang();
 });
-$("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harga")) { const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : ""; } else if (e.target.matches(".f-stok")) e.target.value = e.target.value.replace(/[^\d.,]/g, ""); });
+$("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harga")) { const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : ""; } });
 $("daftarBarang").addEventListener("change", async e => {
   const brs = e.target.closest(".edit-brs"); if (!brs) return;
   const it = petaItem.get(brs.dataset.k), ket = brs.querySelector(".ket-simpan");
-  const harga = angkaDari(brs.querySelector(".f-harga").value), stokTeks = brs.querySelector(".f-stok").value.trim();
-  const stok = stokTeks === "" ? null : Math.min(desimalDari(stokTeks), 2000000000);
+  const harga = angkaDari(brs.querySelector(".f-harga").value), stok = null;
   ket.className = "ket-simpan"; ket.textContent = "menyimpan…";
   const { error } = await sb.from("barang").upsert({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
   if (error) { ket.className = "ket-simpan gagal"; ket.textContent = "gagal: " + pesan(error); return; }
@@ -1091,12 +1081,12 @@ $("unduhExcel").onclick = async () => {
   const status = $("statusExcel"); status.textContent = "Menyiapkan file…";
   try {
     await muatPustakaExcel();
-    const baris = ITEM.map(it => { const s = stokDari(it.kunci), h = hargaDari(it.kunci); return { Kunci: it.kunci, Kategori: KATEGORI[it.kat] || "", Nama: it.nama, Ukuran: it.ukuran, Harga: h || "", Stok: s === null ? "" : s }; });
-    const ws = XLSX.utils.json_to_sheet(baris, { header: ["Kunci", "Kategori", "Nama", "Ukuran", "Harga", "Stok"] });
-    ws["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 12 }, { wch: 8 }];
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Harga dan Stok");
-    XLSX.writeFile(wb, "harga-stok-amt.xlsx");
-    status.textContent = "File diunduh. Isi kolom Harga dan Stok saja, kolom Kunci jangan diubah.";
+    const baris = ITEM.map(it => { const h = hargaDari(it.kunci); return { Kunci: it.kunci, Kategori: KATEGORI[it.kat] || "", Nama: it.nama, Ukuran: it.ukuran, Harga: h || "" }; });
+    const ws = XLSX.utils.json_to_sheet(baris, { header: ["Kunci", "Kategori", "Nama", "Ukuran", "Harga"] });
+    ws["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Harga acuan");
+    XLSX.writeFile(wb, "harga-acuan-amt.xlsx");
+    status.textContent = "File diunduh. Isi kolom Harga saja, kolom Kunci jangan diubah.";
   } catch (e) { status.textContent = pesan(e); }
 };
 $("unggahExcel").onclick = () => $("berkasExcel").click();
@@ -1112,16 +1102,16 @@ $("berkasExcel").onchange = async e => {
     for (const b of baris) {
       const it = petaItem.get(String(kolom(b, "kunci")).trim());
       if (!it) { lewati++; continue; }
-      const hTeks = String(kolom(b, "harga")).trim(), sTeks = String(kolom(b, "stok")).trim();
-      if (hTeks === "" && sTeks === "") continue;
+      const hTeks = String(kolom(b, "harga")).trim();
+      if (hTeks === "") continue;
       const harga = Math.max(0, Math.round(Number(hTeks.replace(/[^\d.,-]/g, "").replace(/[.,](?=\d{3}(\D|$))/g, "").replace(",", ".")) || 0));
-      const stok = sTeks === "" ? null : Math.max(0, Math.min(2000000000, typeof kolom(b, "stok") === "number" ? Math.round(kolom(b, "stok") * 100) / 100 : desimalDari(sTeks)));
+      const stok = null;
       const lama = barang.get(it.kunci);
-      if (lama && lama.harga === harga && lama.stok === stok) continue;
+      if (lama && lama.harga === harga) continue;
       kirim.push({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, stok, diubah: new Date().toISOString() });
     }
     if (!kirim.length) { status.textContent = "Tidak ada perubahan di file itu." + (lewati ? ` ${lewati} baris dilewati karena kolom Kunci tidak dikenal.` : ""); return; }
-    if (!confirm(`${kirim.length} barang akan diperbarui harga/stoknya. Lanjutkan?`)) { status.textContent = "Dibatalkan."; return; }
+    if (!confirm(`${kirim.length} barang akan diperbarui harga acuannya. Lanjutkan?`)) { status.textContent = "Dibatalkan."; return; }
     for (let i = 0; i < kirim.length; i += 400) {
       status.textContent = `Menyimpan ${Math.min(i + 400, kirim.length)} dari ${kirim.length}…`;
       const { error } = await sb.from("barang").upsert(kirim.slice(i, i + 400));
