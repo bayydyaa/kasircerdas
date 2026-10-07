@@ -489,6 +489,19 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
   </div>
 </dialog>
 
+<dialog id="dlgCetak" aria-labelledby="judulCetak">
+  <div class="dlg-isi">
+    <h2 id="judulCetak" style="font-size:1.1rem;color:var(--daun)">Cetak struk</h2>
+    <label class="lbl" for="lebarKertas">Lebar kertas printer</label>
+    <select class="isian" id="lebarKertas"><option value="32">58 mm (kecil)</option><option value="48">80 mm (besar)</option></select>
+    <button class="btn utama penuh" id="cetakBt" style="margin-top:14px">Printer Bluetooth</button>
+    <button class="btn penuh" id="cetakBiasa" style="margin-top:8px">Printer biasa / simpan PDF</button>
+    <p class="info" id="statusCetak" style="margin-top:10px;min-height:1.3em" role="status"></p>
+    <button class="btn penuh kecil" id="lupaPrinter" style="margin-top:4px" hidden>Ganti printer</button>
+    <button class="btn penuh kecil" id="tutupCetak" style="margin-top:8px">Tutup</button>
+  </div>
+</dialog>
+
 <dialog id="dlgPasang" aria-labelledby="judulPasang">
   <div class="dlg-isi">
     <h2 id="judulPasang" style="font-size:1.1rem;color:var(--daun)">Pasang Kasir AMT di HP</h2>
@@ -688,7 +701,8 @@ $("cekLagi").onclick = async () => {
 };
 async function keluar(){
   try { await sb.auth.signOut(); } catch (e) {}
-  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.ubah = null; aturPitaUbah();
+  st.drafSiap = false; buangDraf();
+  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.ubah = null; st.benihKirim = null; aturPitaUbah();
   document.body.classList.remove("kr-buka");
   aturMode(false); tampilLayar("layarMasuk");
 }
@@ -716,7 +730,9 @@ async function bukaAplikasi(){
   st.gagalMuat = "";
   gambarChip("katKasir", "katKasir", gambarKasir);
   gambarChip("katBarang", "katBarang", gambarBarang);
-  bukaHal("kasir"); gambarKeranjang();
+  const pulih = pulihkanDraf(); st.drafSiap = true;
+  aturPitaUbah(); bukaHal("kasir"); gambarKeranjang();
+  if (pulih) roti(st.ubah ? "Perubahan " + st.ubah.nomor + " yang belum disimpan dikembalikan." : "Keranjang yang belum disimpan dikembalikan.");
   if (adalahPemilik()) hitungTunggu();
 }
 
@@ -830,6 +846,37 @@ const kali = (qty, harga) => Math.round(Math.round((Number(qty) || 0) * 100) * M
 const subBaris = b => kali(b.qty, b.harga);
 const totalKeranjang = () => { let t = 0; keranjang.forEach(b => { t += subBaris(b); }); return t; };
 const hargaLengkap = () => [...keranjang.values()].every(b => b.harga > 0);
+
+/* ---------- keranjang disimpan di HP supaya tidak hilang kalau halaman termuat ulang ----------
+   Yang disimpan: isi keranjang, cara bayar, rekening, nama pembeli, dan (kalau sedang mengubah
+   transaksi) transaksi mana yang diubah. Hanya dipulihkan untuk akun yang sama, paling lama 12 jam. */
+const KUNCI_DRAF = "kasir-amt-keranjang";
+function simpanDraf(){
+  if (!st.drafSiap || !profil) return;
+  try {
+    if (!keranjang.size && !st.ubah) { localStorage.removeItem(KUNCI_DRAF); return; }
+    localStorage.setItem(KUNCI_DRAF, JSON.stringify({ uid: profil.id, waktu: Date.now(), baris: [...keranjang], metode: metode(),
+      rekening: $("rekening").value || "", pembeli: $("pembeli").value || "", ubah: st.ubah || null, benih: st.benihKirim || null }));
+  } catch (e) {}
+}
+function buangDraf(){ try { localStorage.removeItem(KUNCI_DRAF); } catch (e) {} }
+function pulihkanDraf(){
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(KUNCI_DRAF) || "null"); } catch (e) {}
+  if (!d || d.uid !== profil.id || !Array.isArray(d.baris) || Date.now() - Number(d.waktu) > 12 * 3600 * 1000) { buangDraf(); return false; }
+  keranjang.clear();
+  for (const x of d.baris) {
+    if (!Array.isArray(x) || typeof x[0] !== "string" || !x[1] || typeof x[1].kunci !== "string" || typeof x[1].nama !== "string") continue;
+    const b = x[1], qty = Math.round((Number(b.qty) || 0) * 100) / 100;
+    if (qty > 0) keranjang.set(x[0], { kunci: b.kunci, nama: b.nama, ukuran: String(b.ukuran || ""), qty, harga: Math.round(Number(b.harga) || 0), tipe: b.tipe === "partai" ? "partai" : "ecer" });
+  }
+  const r = document.querySelector(`input[name="metode"][value="${d.metode === "transfer" ? "transfer" : "tunai"}"]`); if (r) r.checked = true;
+  if (d.rekening && REKENING.includes(d.rekening)) $("rekening").value = d.rekening;
+  $("pembeli").value = String(d.pembeli || "").slice(0, 60);
+  st.ubah = d.ubah && d.ubah.id != null ? { id: d.ubah.id, nomor: String(d.ubah.nomor || "") } : null;
+  st.benihKirim = typeof d.benih === "string" ? d.benih : null;
+  return keranjang.size > 0 || !!st.ubah;
+}
 /* Tanda unik untuk satu isi keranjang. Kalau sinyal putus tepat saat menyimpan lalu Simpan ditekan lagi,
    server mengenali tandanya dan tidak mencatat transaksi yang sama dua kali. Isi keranjang berubah = tanda baru. */
 function kunciKirim(muatan){
@@ -932,7 +979,10 @@ function hitungBayar(){
   const PETUNJUK = "Isi harga satuan semua barang dulu.", galat = $("galatBayar");
   if (keranjang.size && !lengkap) galat.textContent = PETUNJUK; else if (galat.textContent === PETUNJUK) galat.textContent = "";
   $("simpanTrx").disabled = !keranjang.size || !lengkap || total <= 0;
+  simpanDraf();
 }
+$("pembeli").addEventListener("input", simpanDraf);
+$("rekening").addEventListener("change", simpanDraf);
 document.querySelectorAll('input[name="metode"]').forEach(r => r.addEventListener("change", hitungBayar));
 
 $("simpanTrx").onclick = async () => {
@@ -1096,7 +1146,109 @@ function bukaStruk(t, baru){
   const d = $("dlgStruk"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
 $("tutupStruk").onclick = () => $("dlgStruk").close();
-$("cetakStruk").onclick = async () => {
+/* ---------- cetak ke printer struk Bluetooth (ESC/POS) ----------
+   Memakai Web Bluetooth: jalan di Chrome Android dan Chrome laptop, TIDAK tersedia di iPhone.
+   Printernya harus mendukung Bluetooth LE (kebanyakan printer struk 58 mm keluaran baru). */
+const LAYANAN_PRINTER = ["000018f0-0000-1000-8000-00805f9b34fb", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+  "0000ff00-0000-1000-8000-00805f9b34fb", "0000fff0-0000-1000-8000-00805f9b34fb", "0000ffe0-0000-1000-8000-00805f9b34fb"];
+let printerBt = null;                       // { device, ch } selama halaman terbuka
+const ascii = t => String(t == null ? "" : t).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[·•]/g, "-").replace(/[×]/g, "x").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "?");
+/* susun struk sebagai baris teks selebar "kol" huruf: [{ teks, tengah, tebal, besar }] */
+function barisStruk(t, kol){
+  const brs = [];
+  const bungkus = (teks, lebar) => { const hasil = []; let baris = "";
+    for (let kata of ascii(teks).split(" ")) {
+      while (kata.length > lebar) { if (baris) { hasil.push(baris); baris = ""; } hasil.push(kata.slice(0, lebar)); kata = kata.slice(lebar); }
+      const coba = baris ? baris + " " + kata : kata;
+      if (coba.length <= lebar) baris = coba; else { hasil.push(baris); baris = kata; }
+    }
+    hasil.push(baris); return hasil; };
+  const tengah = (teks, tebal, besar) => bungkus(teks, kol).forEach(x => brs.push({ teks: x, tengah: true, tebal, besar }));
+  const kiri = teks => bungkus(teks, kol).forEach(x => brs.push({ teks: x }));
+  const dua = (a, b, tebal) => { b = ascii(b); const k = bungkus(a, Math.max(4, kol - b.length - 1));
+    k.forEach((x, i) => brs.push({ teks: i === k.length - 1 ? x + " ".repeat(Math.max(1, kol - x.length - b.length)) + b : x, tebal })); };
+  const garis = () => brs.push({ teks: "-".repeat(kol) });
+  tengah(TOKO.nama, true, true); tengah(TOKO.alamat); TOKO.kontak.forEach(k => tengah(k));
+  if (t.batal) tengah("*** DIBATALKAN ***", true);
+  garis(); dua("No.", t.nomor || "#" + t.id); dua("Waktu", waktuTeks(t.waktu)); dua("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama);
+  if (t.pembeli) dua("Pembeli", t.pembeli);
+  garis();
+  for (const i of (t.item || [])) {
+    kiri(i.nama + (i.ukuran ? " " + i.ukuran : "") + (i.tipe === "partai" ? " (partai)" : ""));
+    dua("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)));
+  }
+  garis(); dua("TOTAL", rp(t.total), true);
+  dua((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar));
+  if (Number(t.kembali) > 0) dua("Kembali", rp(t.kembali));
+  if (t.diubah_oleh) tengah("Diubah oleh " + t.diubah_oleh);
+  garis(); tengah("Terima kasih sudah berbelanja");
+  return brs;
+}
+/* ubah baris teks jadi perintah ESC/POS */
+function escposStruk(t, kol){
+  const b = [0x1B, 0x40];                                   // reset printer
+  for (const r of barisStruk(t, kol)) {
+    b.push(0x1B, 0x61, r.tengah ? 1 : 0);                   // rata tengah / kiri
+    b.push(0x1B, 0x45, r.tebal ? 1 : 0);                    // tebal
+    b.push(0x1D, 0x21, r.besar ? 0x01 : 0x00);              // tinggi ganda untuk nama toko
+    for (const c of r.teks) b.push(c.charCodeAt(0));
+    b.push(0x0A);
+  }
+  b.push(0x1B, 0x61, 0, 0x1B, 0x45, 0, 0x1D, 0x21, 0, 0x0A, 0x0A, 0x0A, 0x0A);   // kembali normal, dorong kertas
+  return new Uint8Array(b);
+}
+async function sambungPrinter(){
+  if (printerBt && printerBt.device.gatt.connected) return printerBt.ch;
+  const device = printerBt ? printerBt.device : await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: LAYANAN_PRINTER });
+  const server = await device.gatt.connect();
+  let layanan = [];
+  try { layanan = await server.getPrimaryServices(); } catch (e) {}
+  for (const s of layanan) {
+    let ciri = []; try { ciri = await s.getCharacteristics(); } catch (e) {}
+    for (const c of ciri) if (c.properties.write || c.properties.writeWithoutResponse) { printerBt = { device, ch: c }; return c; }
+  }
+  try { device.gatt.disconnect(); } catch (e) {}
+  printerBt = null;
+  throw new Error("Perangkat itu tidak dikenali sebagai printer struk. Pastikan yang dipilih printernya, dan printernya mendukung Bluetooth LE.");
+}
+async function kirimKePrinter(data){
+  const ch = await sambungPrinter(), tanpaBalas = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
+  for (let i = 0; i < data.length; i += 100) {
+    const potong = data.slice(i, i + 100);
+    if (tanpaBalas) await ch.writeValueWithoutResponse(potong); else await ch.writeValue(potong);
+    await new Promise(ok => setTimeout(ok, 25));             // beri jeda supaya printer tidak kewalahan
+  }
+}
+const lebarKertas = () => (Number($("lebarKertas").value) === 48 ? 48 : 32);
+$("cetakStruk").onclick = () => {
+  try { const l = localStorage.getItem("kasir-amt-lebar"); if (l === "48" || l === "32") $("lebarKertas").value = l; } catch (e) {}
+  const adaBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+  $("cetakBt").disabled = !adaBt;
+  $("statusCetak").textContent = adaBt ? (printerBt ? "Printer tersambung: " + (printerBt.device.name || "tanpa nama") + "." : "")
+    : "HP atau browser ini tidak bisa menyambung langsung ke printer Bluetooth (iPhone memang tidak mengizinkan). Pakai Chrome di HP Android, atau kirim foto struknya.";
+  $("lupaPrinter").hidden = !printerBt;
+  const d = $("dlgCetak"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+};
+$("lebarKertas").onchange = () => { try { localStorage.setItem("kasir-amt-lebar", String(lebarKertas())); } catch (e) {} };
+$("tutupCetak").onclick = () => $("dlgCetak").close();
+$("lupaPrinter").onclick = () => { try { if (printerBt) printerBt.device.gatt.disconnect(); } catch (e) {} printerBt = null; $("lupaPrinter").hidden = true; $("statusCetak").textContent = "Printer dilepas. Tekan Printer Bluetooth untuk memilih printer lain."; };
+$("cetakBt").onclick = async () => {
+  const status = $("statusCetak"), tombol = $("cetakBt");
+  tombol.disabled = true; status.textContent = printerBt ? "Mencetak…" : "Pilih printernya di daftar yang muncul…";
+  try {
+    await kirimKePrinter(escposStruk(st.struk, lebarKertas()));
+    status.textContent = "Struk dikirim ke " + ((printerBt && printerBt.device.name) || "printer") + ".";
+    $("lupaPrinter").hidden = false;
+  } catch (e) {
+    const m = (e && e.message) || "";
+    if (e && e.name === "NotFoundError" && /cancel/i.test(m)) status.textContent = "Belum ada printer yang dipilih.";
+    else if (/adapter|not available|turned off|disabled/i.test(m)) status.textContent = "Bluetooth HP belum menyala. Nyalakan dulu, lalu coba lagi.";
+    else if (e && (e.name === "NetworkError" || /GATT|disconnected|connect/i.test(m))) { printerBt = null; status.textContent = "Tidak bisa tersambung ke printer. Pastikan printer menyala dan dekat, lalu coba lagi."; }
+    else status.textContent = m || "Gagal mencetak.";
+  } finally { tombol.disabled = false; }
+};
+$("cetakBiasa").onclick = async () => {
+  $("dlgCetak").close();
   $("areaCetak").innerHTML = htmlStruk(st.struk);
   /* tunggu logo siap dulu supaya ikut tercetak */
   const g = $("areaCetak").querySelector("img");
@@ -1455,7 +1607,7 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     tampilLayar("layarSetel"); return;
   }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { pengguna = profil = null; keranjang.clear(); st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
+  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
   try {
     const { data } = await sb.auth.getSession();
     if (data && data.session) { await setelahMasuk(data.session.user); return; }
