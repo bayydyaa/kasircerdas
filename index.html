@@ -962,7 +962,7 @@ $("simpanTrx").onclick = async () => {
   } finally { aturPitaUbah(); hitungBayar(); }
 };
 
-/* ---------- mode ubah transaksi (hanya pemilik) ---------- */
+/* ---------- mode ubah transaksi (pemilik: bebas; admin dan karyawan: milik sendiri, 15 menit) ---------- */
 function aturPitaUbah(){
   $("pitaUbah").hidden = !st.ubah;
   if (st.ubah) $("teksUbah").textContent = "Sedang mengubah " + st.ubah.nomor;
@@ -972,6 +972,7 @@ function aturPitaUbah(){
   $("batalUbahBawah").hidden = !st.ubah;
 }
 function mulaiUbah(t){
+  if (!bolehUbah(t)) { roti("Transaksi ini sudah lewat 15 menit. Minta pemilik yang mengubahnya.", true); $("ubahTrx").hidden = true; return; }
   if (keranjang.size && !confirm("Isi keranjang sekarang akan diganti dengan isi transaksi " + t.nomor + ". Lanjutkan?")) return;
   keranjang.clear();
   for (const i of (t.item || [])) {
@@ -1079,13 +1080,19 @@ function siapkanFoto(t){
     .then(blob => { const f = new File([blob], "struk-" + String(t.nomor || t.id).replace(/[^\w-]/g, "") + ".png", { type: "image/png" }); if (st.struk === t) st.fileStruk = f; return f; })
     .catch(() => null);
 }
+const BATAS_UBAH = 15 * 60 * 1000;
+const sisaUbah = t => Math.max(0, Math.ceil((BATAS_UBAH - (Date.now() - new Date(t.waktu).getTime())) / 60000));
+const bolehUbah = t => !!profil && !t.batal && (adalahPemilik() || (t.kasir_id === profil.id && Date.now() - new Date(t.waktu).getTime() < BATAS_UBAH));
 function bukaStruk(t, baru){
   st.struk = t;
   $("isiStruk").innerHTML = htmlStruk(t);
   siapkanFoto(t);
   $("tutupStruk").textContent = baru ? "Selesai" : "Tutup";
-  /* hanya pemilik yang boleh mengubah atau membatalkan */
-  $("batalTrx").hidden = $("ubahTrx").hidden = !(adalahPemilik() && !t.batal && !baru);
+  /* Batalkan: hanya pemilik. Ubah: pemilik kapan saja; admin dan karyawan hanya transaksi miliknya
+     sendiri dalam 15 menit setelah disimpan (server memeriksa ulang aturan yang sama). */
+  $("batalTrx").hidden = !(adalahPemilik() && !t.batal && !baru);
+  $("ubahTrx").hidden = !bolehUbah(t);
+  $("ubahTrx").textContent = adalahPemilik() ? "Ubah transaksi ini" : "Ubah transaksi ini (" + sisaUbah(t) + " menit lagi)";
   const d = $("dlgStruk"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
 $("tutupStruk").onclick = () => $("dlgStruk").close();
