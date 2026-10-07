@@ -664,18 +664,25 @@ function ambilDariHalaman(html){
 }
 
 async function muatBarang(){
-  const baru = new Map();
+  const baru = new Map(), hariIni = tglLokal(new Date());
   for (let dari = 0; ; dari += 1000) {
-    const { data, error } = await sb.from("barang").select("kunci,nama,harga,harga_partai").order("kunci").range(dari, dari + 999);
+    const { data, error } = await sb.from("barang").select("kunci,nama,harga,harga_partai,diubah").order("kunci").range(dari, dari + 999);
     if (error) throw error;
-    for (const b of data) baru.set(b.kunci, { harga: Number(b.harga) || 0, partai: Number(b.harga_partai) || 0, nama: b.nama || "" });
+    for (const b of data) {
+      /* "barang lain" (diketik kasir) hanya berlaku pada hari terakhir barang itu dijual. Besoknya dianggap
+         tidak ada: tidak muncul di pencarian dan harganya tidak disarankan, supaya salah ketik tidak menumpuk
+         dan tidak dobel dengan barang yang nanti dimasukkan ke katalog. */
+      const hari = b.diubah ? tglLokal(new Date(b.diubah)) : "";
+      if (b.kunci.startsWith("lain|") && hari !== hariIni) continue;
+      baru.set(b.kunci, { harga: Number(b.harga) || 0, partai: Number(b.harga_partai) || 0, nama: b.nama || "", hari });
+    }
     if (data.length < 1000) break;
   }
   barang.clear(); baru.forEach((v, k) => barang.set(k, v));
-  /* barang di luar katalog yang pernah diketik kasir: ikut muncul saat dicari, supaya tidak diketik ulang
-     dengan ejaan berbeda (yang akan jadi baris terpisah di laporan) */
+  /* barang di luar katalog yang diketik kasir HARI INI: ikut muncul saat dicari, supaya di hari yang sama
+     tidak diketik ulang dengan ejaan berbeda (yang akan jadi baris terpisah di rekap hari itu) */
   LAIN = [...barang].filter(([k, v]) => k.startsWith("lain|") && v.nama)
-    .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, cari: v.nama.toLowerCase() }))
+    .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, hari: v.hari, cari: v.nama.toLowerCase() }))
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 /* Harga acuan = harga ECER terakhir. Saran harga di keranjang SELALU diambil dari sini, juga untuk baris partai:
@@ -903,7 +910,7 @@ function tampilKosongKasir(judul, isi, cobaLagi){
 function gambarKasir(){
   if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
   const kata = st.kataKasir;
-  const hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => cocok(it, -1, kata)) : []);
+  const hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => it.hari === tglLokal(new Date()) && cocok(it, -1, kata)) : []);
   const el = $("daftarKasir");
   $("tambahLain").textContent = kata ? `Tambah "${$("cariKasir").value.trim()}" sebagai barang lain` : "Barang tidak ada di daftar? Ketik sendiri";
   if (!hasil.length) { el.innerHTML = ""; tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri."); return; }
@@ -937,7 +944,8 @@ function tambahKeKeranjang(kunci, nama, ukuran){
 $("tambahLain").onclick = () => {
   const nama = (prompt("Nama barang (tulis lengkap dengan ukurannya, mis. Paranet ecer 1 m):", $("cariKasir").value.trim()) || "").trim().replace(/\s+/g, " ").slice(0, 80);
   if (nama.length < 2) return;
-  const kunciLain = "lain|" + nama.toLowerCase(), lama = barang.get(kunciLain);
+  const kunciLain = "lain|" + nama.toLowerCase(), simpanan = barang.get(kunciLain), lama = simpanan && simpanan.hari === tglLokal(new Date()) ? simpanan : null;
+  if (simpanan && !lama) barang.delete(kunciLain);         // sisa kemarin (kasir dibiarkan terbuka): jangan sarankan harganya
   tambahKeKeranjang(kunciLain, lama && lama.nama ? lama.nama : nama, "");
   if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
 };
