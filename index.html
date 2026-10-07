@@ -231,6 +231,7 @@ button.brs{width:100%;text-align:start}
 .kode{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.76rem;font-weight:800;letter-spacing:.02em;background:var(--daun);color:#fff;font-variant-numeric:tabular-nums}
 .brs .aksi-akun{display:flex;flex-wrap:wrap;gap:6px}
 .brs.tumpuk{flex-wrap:wrap}
+#daftarMirip .brs:first-child{border-top:0}
 .brs.tumpuk .kiri{flex:1 1 100%}
 .brs .kiri small{display:block;overflow-wrap:anywhere}
 .sub-judul{padding:14px 16px 8px;font-size:.82rem;font-weight:700;color:var(--redup);border-top:1px solid var(--garis)}
@@ -405,6 +406,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
             </div>
             <div class="chip-rel" id="katKasir"></div>
           </div>
+          <p class="info" id="catatanMirip" style="margin:0 2px 8px;font-weight:600;color:var(--daun)" hidden>Tidak ada yang persis sama. Mungkin maksudnya salah satu dari ini:</p>
           <div class="daftar-barang" id="daftarKasir"></div>
           <div class="kosong panel" id="kosongKasir" hidden></div>
           <div class="lebih" id="lebihKasir" hidden><button class="btn">Tampilkan lebih banyak</button></div>
@@ -522,6 +524,16 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
     <button class="btn bahaya penuh kecil" id="batalTrx" style="margin-top:8px" hidden>Batalkan transaksi ini</button>
     <button class="btn penuh kecil" id="pulihTrx" style="margin-top:8px" hidden>Kembalikan transaksi ini</button>
     <p class="info" id="ketBatal" style="margin-top:8px;text-align:center" hidden></p>
+  </div>
+</dialog>
+
+<dialog id="dlgMirip" aria-labelledby="judulMirip">
+  <div class="dlg-isi">
+    <h2 id="judulMirip" style="font-size:1.1rem;color:var(--daun)">Barang ini mungkin sudah ada di daftar</h2>
+    <p class="info" style="margin-top:6px">Yang diketik: <b id="ketikMirip" style="color:var(--teks)"></b>. Apakah sama dengan salah satu barang di bawah?</p>
+    <div class="panel" id="daftarMirip" style="margin-top:12px;max-height:42dvh;overflow-y:auto"></div>
+    <button class="btn penuh" id="tetapLain" style="margin-top:12px">Bukan, ini barang yang berbeda</button>
+    <button class="btn penuh kecil" id="batalMirip" style="margin-top:8px">Batal</button>
   </div>
 </dialog>
 
@@ -650,7 +662,7 @@ async function muatKatalog(){
     for (const u of (uk.length ? uk : [""])) {
       const kunci = slug + "|" + u;
       if (petaItem.has(kunci)) continue;
-      const it = { kunci, nama, ukuran: u, kat, cari: (nama + " " + u).toLowerCase() };
+      const it = { kunci, nama, ukuran: u, kat, cari: (nama + " " + u).toLowerCase(), kata: kataDari(nama + " " + u) };
       ITEM.push(it); petaItem.set(kunci, it);
     }
   }
@@ -690,7 +702,7 @@ async function muatBarang(){
   /* barang di luar katalog yang diketik kasir HARI INI: ikut muncul saat dicari, supaya di hari yang sama
      tidak diketik ulang dengan ejaan berbeda (yang akan jadi baris terpisah di rekap hari itu) */
   LAIN = [...barang].filter(([k, v]) => k.startsWith("lain|") && v.nama)
-    .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, hari: v.hari, cari: v.nama.toLowerCase() }))
+    .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, hari: v.hari, cari: v.nama.toLowerCase(), kata: kataDari(v.nama) }))
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 /* Harga acuan = harga ECER terakhir. Saran harga di keranjang SELALU diambil dari sini, juga untuk baris partai:
@@ -902,6 +914,49 @@ function gambarChip(idEl, kunciSt, gambarUlang){
     gambarUlang();
   };
 }
+/* ---------- pencarian yang memaafkan salah eja ----------
+   Dipakai saat pencarian biasa tidak menemukan apa pun, dan sebelum kasir menambah "barang lain",
+   supaya barang yang sebenarnya sudah ada di daftar (mis. "Sepatu Bot" dicari sebagai "sepatu boot")
+   tidak diketik ulang sebagai barang baru. */
+function rapikan(t){
+  return String(t == null ? "" : t).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ").replace(/([a-z])\1+/g, "$1").trim();          // huruf dobel disamakan: boot = bot
+}
+function kataDari(t){ return rapikan(t).split(" ").filter(Boolean); }
+function jarakKata(a, b, maks){                    // jumlah huruf yang berbeda (Levenshtein), berhenti kalau sudah lewat batas
+  if (Math.abs(a.length - b.length) > maks) return maks + 1;
+  let lama = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const baru = [i]; let min = i;
+    for (let j = 1; j <= b.length; j++) { const v = Math.min(lama[j] + 1, baru[j - 1] + 1, lama[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); baru.push(v); if (v < min) min = v; }
+    if (min > maks) return maks + 1;
+    lama = baru;
+  }
+  return lama[b.length];
+}
+/* 2 = sama persis, 1 = mirip, 0 = tidak cocok */
+function nilaiKata(q, tok){
+  if (q === tok) return 2;
+  if (/^\d+$/.test(q) || /^\d+$/.test(tok)) return /^\d+$/.test(q) && tok.includes(q) ? 1 : 0;     // angka tidak boleh "kira-kira"
+  if (q.length >= 2 && tok.includes(q)) return 1;
+  if (tok.length >= 3 && q.includes(tok)) return 1;
+  const maks = q.length >= 6 ? 2 : q.length >= 4 ? 1 : 0;       // kata 4-5 huruf boleh beda 1 huruf, 6 huruf ke atas boleh beda 2
+  if (!maks) return 0;
+  if (jarakKata(q, tok, maks) <= maks) return 1;
+  return tok.length > q.length && jarakKata(q, tok.slice(0, q.length), maks) <= maks ? 1 : 0;              // baru diketik sebagian
+}
+function cariMirip(teks, batas){
+  const qs = kataDari(teks); if (!qs.length) return [];
+  /* Sampai 2 kata: semuanya harus cocok. Lebih dari itu: paling sedikit separuhnya, dan kata PERTAMA
+     (biasanya nama barangnya) wajib cocok, supaya kata umum seperti "ecer" atau "1" saja tidak dianggap mirip. */
+  const butuh = qs.length <= 2 ? qs.length : Math.ceil(qs.length * 0.5), hariIni = tglLokal(new Date()), hasil = [];
+  for (const it of ITEM.concat(LAIN.filter(x => x.hari === hariIni))) {
+    let kena = 0, skor = 0, pertama = false;
+    for (let n = 0; n < qs.length; n++) { const q = qs[n]; let terbaik = 0; for (const tok of it.kata) { const v = nilaiKata(q, tok); if (v > terbaik) { terbaik = v; if (v === 2) break; } } if (terbaik) { kena++; skor += terbaik; if (n === 0) pertama = true; } }
+    if (kena >= butuh && pertama) hasil.push({ it, skor: skor / qs.length - Math.max(0, it.kata.length - qs.length) * 0.02 });
+  }
+  return hasil.sort((a, b) => b.skor - a.skor).slice(0, batas || 6).map(x => x.it);
+}
 const cocok = (it, kat, kata) => (kat < 0 || it.kat === kat) && (!kata || kata.split(/\s+/).every(w => it.cari.includes(w)));
 
 /* =========================================================
@@ -916,9 +971,13 @@ function tampilKosongKasir(judul, isi, cobaLagi){
 /* Semua barang katalog tampil. Harga TIDAK dikunci: kasir mengetik harga di keranjang,
    harga terakhir hanya muncul sebagai saran. */
 function gambarKasir(){
-  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
+  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; $("catatanMirip").hidden = true; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
   const kata = st.kataKasir;
-  const hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => it.hari === tglLokal(new Date()) && cocok(it, -1, kata)) : []);
+  let hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => it.hari === tglLokal(new Date()) && cocok(it, -1, kata)) : []);
+  /* tidak ada yang persis sama: coba cari yang ejaannya mirip (di semua kategori) */
+  const pakaiMirip = !hasil.length && !!kata;
+  if (pakaiMirip) hasil = cariMirip(kata, 8);
+  $("catatanMirip").hidden = !(pakaiMirip && hasil.length);
   const el = $("daftarKasir");
   $("tambahLain").textContent = kata ? `Tambah "${$("cariKasir").value.trim()}" sebagai barang lain` : "Barang tidak ada di daftar? Ketik sendiri";
   if (!hasil.length) { el.innerHTML = ""; tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri."); return; }
@@ -954,8 +1013,23 @@ $("tambahLain").onclick = () => {
   if (nama.length < 2) return;
   const kunciLain = "lain|" + nama.toLowerCase(), simpanan = barang.get(kunciLain), lama = simpanan && simpanan.hari === tglLokal(new Date()) ? simpanan : null;
   if (simpanan && !lama) barang.delete(kunciLain);         // sisa kemarin (kasir dibiarkan terbuka): jangan sarankan harganya
-  tambahKeKeranjang(kunciLain, lama && lama.nama ? lama.nama : nama, "");
-  if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
+  const bukaKr = () => { if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka"); };
+  const tetapTambah = () => { tambahKeKeranjang(kunciLain, lama && lama.nama ? lama.nama : nama, ""); bukaKr(); };
+  /* sebelum menambah, tunjukkan barang di daftar yang namanya mirip: sering kali barangnya sudah ada,
+     hanya beda ejaan */
+  const mirip = lama ? [] : cariMirip(nama, 5).filter(it => it.kunci !== kunciLain);
+  if (!mirip.length) { tetapTambah(); return; }
+  $("ketikMirip").textContent = nama;
+  $("daftarMirip").innerHTML = mirip.map((it, i) =>
+    `<button class="brs" data-i="${i}"><div class="kiri"><b style="white-space:normal">${esc(it.nama)}</b><small>${esc(it.ukuran || (it.lain ? "Barang lain hari ini" : "Satuan"))}</small></div><span class="cap">Pakai ini</span></button>`).join("");
+  $("daftarMirip").onclick = e => {
+    const b = e.target.closest("button[data-i]"); if (!b) return;
+    const it = mirip[Number(b.dataset.i)]; $("dlgMirip").close();
+    tambahKeKeranjang(it.kunci, it.nama, it.ukuran); bukaKr();
+  };
+  $("tetapLain").onclick = () => { $("dlgMirip").close(); tetapTambah(); };
+  $("batalMirip").onclick = () => $("dlgMirip").close();
+  const d = $("dlgMirip"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 };
 
 function ubahQty(id, qty){
@@ -1461,17 +1535,25 @@ setInterval(segarkanLaporan, 60000);
 document.addEventListener("visibilitychange", segarkanLaporan);
 /* gabungkan penjualan per barang + harga, urut dari transaksi paling awal (seperti rekap harian admin) */
 function rekapBarang(sah){
-  /* Barang yang sama dijumlah jadi satu baris. Kalau harganya beda (atau ecer/partai beda),
-     barisnya dipisah tetapi tetap berurutan atas-bawah. Urutan barang mengikuti penjualan paling awal. */
+  /* Satu baris untuk tiap BARANG + HARGA. Barang yang sama dengan harga yang sama selalu dijumlah jadi satu
+     baris, dari kasir mana pun dan baik dicatat ecer maupun partai. Kalau harganya berbeda, barisnya dipisah
+     tetapi tetap berurutan atas-bawah. Barang dikenali dari namanya (huruf besar/kecil dan spasi diabaikan),
+     jadi barang katalog dan barang ketikan manual yang namanya sama ikut tergabung. Urutan mengikuti
+     penjualan paling awal. */
   const perBarang = new Map();
   for (const t of sah.slice().reverse())
     for (const i of (t.item || [])) {
-      const tipe = i.tipe === "partai" ? "partai" : "ecer";
-      let grup = perBarang.get(i.kunci); if (!grup) perBarang.set(i.kunci, grup = new Map());
-      const k = i.harga + "|" + tipe, x = grup.get(k) || { nama: i.nama + (i.ukuran ? " " + i.ukuran : ""), harga: Number(i.harga), tipe, qty: 0, uang: 0 };
-      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); grup.set(k, x);
+      const partai = i.tipe === "partai", nama = (i.nama + (i.ukuran ? " " + i.ukuran : "")).replace(/\s+/g, " ").trim();
+      const kunciNama = nama.toLowerCase();
+      let grup = perBarang.get(kunciNama); if (!grup) perBarang.set(kunciNama, grup = new Map());
+      const k = String(Number(i.harga)), x = grup.get(k) || { nama, harga: Number(i.harga), qty: 0, uang: 0, uangPartai: 0, adaEcer: false, adaPartai: false };
+      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i);
+      if (partai) { x.adaPartai = true; x.uangPartai += jumlahItem(i); } else x.adaEcer = true;
+      grup.set(k, x);
     }
-  return [...perBarang.values()].flatMap(grup => [...grup.values()]);
+  const hasil = [...perBarang.values()].flatMap(grup => [...grup.values()]);
+  hasil.forEach(x => { x.tipe = x.adaPartai && x.adaEcer ? "campur" : x.adaPartai ? "partai" : "ecer"; });
+  return hasil;
 }
 /* ---------- kotak "Barang lain", hanya tampil untuk pemilik ----------
    Barang yang diketik manual oleh kasir (tidak ada di katalog), supaya pemilik tahu apa saja yang
@@ -1509,10 +1591,10 @@ function gambarLaporan(){
   let omzet = 0, tunai = 0;
   for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); }
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
-  const rekap = rekapBarang(sah), partai = rekap.filter(x => x.tipe === "partai").reduce((a, x) => a + x.uang, 0);
+  const rekap = rekapBarang(sah), partai = rekap.reduce((a, x) => a + x.uangPartai, 0);
   $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(sah.length)) + kotak("Total cash", rp(tunai)) + kotak("Total transfer", rp(omzet - tunai)) + kotak("Ecer", rp(omzet - partai)) + kotak("Partai", rp(partai));
   $("terlaris").innerHTML = `<h2>Barang terjual</h2>` + (rekap.length ? rekap.map(x =>
-    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
+    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
   const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
   $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + (st.trx.length ? st.trx.map(t =>
@@ -1532,7 +1614,7 @@ function susunLaporan(){
   sel.push([K(`BULAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:F1");
   sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:F2");
   sel.push([K("NAMA PRODUCT", 2), K("", 2), K("QTY", 2), K("HARGA", 2), K("JUMLAH UANG", 2), K("KET", 2)]); gabung.push("A3:B3");
-  rekap.forEach((x, i) => sel.push([K(i + 1, 4), K(x.nama, 3), K(x.qty, 4), K(x.harga, 5), K(x.uang, 5), K(x.tipe === "partai" ? "PARTAI" : "ECER", 8)]));
+  rekap.forEach((x, i) => sel.push([K(i + 1, 4), K(x.nama, 3), K(x.qty, 4), K(x.harga, 5), K(x.uang, 5), K(x.tipe === "partai" ? "PARTAI" : x.tipe === "campur" ? "ECER+PARTAI" : "ECER", 8)]));
   const total = rekap.reduce((a, x) => a + x.uang, 0);
   gabung.push(`A${brs()}:D${brs()}`); sel.push([K("", 9), K("", 9), K("", 9), K("", 9), K(total, 7), K("", 9)]);
   let tf = 0; const awalTf = brs();
@@ -1543,8 +1625,7 @@ function susunLaporan(){
     sel.push([K("", 9), K("", 9), K(t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), 8), K("", 8), K(Number(t.total), 5), K("", 9)]);
   }
   if (brs() - awalTf > 0) gabung.push(`A${awalTf}:B${brs() - 1}`);            // blok kosong di kiri daftar transfer
-  const partai = rekap.filter(x => x.tipe === "partai").reduce((a, x) => a + x.uang, 0);
-  for (const [label, nilai] of [["TOTAL TF", tf], ["TOTAL CASH", total - tf], ["TOTAL ECER", total - partai], ["TOTAL PARTAI", partai]]) {
+  for (const [label, nilai] of [["TOTAL TF", tf], ["TOTAL CASH", total - tf]]) {
     gabung.push(`A${brs()}:D${brs()}`); sel.push([K(label, 6), K("", 6), K("", 6), K("", 6), K(nilai, 7), K("", 9)]);
   }
   return { sel, gabung, baris: sel.map(r => r.map(c => c.v)) };
@@ -1593,7 +1674,7 @@ function buatXlsxLaporan(){
     ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Penjualan" sheetId="1" r:id="rId1"/></sheets></workbook>`],
     ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
     ["xl/styles.xml", GAYA_XML],
-    ["xl/worksheets/sheet1.xml", lembarXml(sel, gabung, [5, 40, 9, 13, 16, 10])],
+    ["xl/worksheets/sheet1.xml", lembarXml(sel, gabung, [5, 40, 9, 13, 16, 15])],
   ]);
 }
 $("eksporLaporan").onclick = () => {
