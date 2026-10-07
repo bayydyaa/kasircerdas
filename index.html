@@ -192,14 +192,20 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .ringkas div{padding:14px 16px}
 .ringkas small{display:block;color:var(--redup);font-weight:600;font-size:.82rem}
 .ringkas b{font-size:1.35rem;color:var(--daun);font-weight:800}
-.dua{display:grid;gap:14px}
-@media (min-width:900px){.dua{grid-template-columns:1fr 1.4fr;align-items:start}}
+/* kolom memakai minmax(0,...) supaya nama barang yang panjang dipotong "...", bukan melebarkan halaman */
+.dua{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.dua>*{min-width:0}
+@media (min-width:900px){.dua{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:start}}
 .panel h2{font-size:.98rem;color:var(--daun);padding:14px 16px 8px}
 .brs{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--garis);font-size:.92rem}
 .brs .kiri{flex:1;min-width:0}
 .brs .kiri b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brs .kiri small{color:var(--redup)}
-.brs .kanan{font-weight:800;text-align:end;white-space:nowrap}
+.brs .kanan{font-weight:800;text-align:end;white-space:nowrap;flex:none}
+.panel{min-width:0;max-width:100%}
+/* nama barang di rekap dan di kotak barang lain ditampilkan utuh (turun baris), supaya ukurannya tetap terbaca */
+#terlaris .kiri b,#lainLaporan .kiri b,#semuaLain .kiri b{white-space:normal;overflow-wrap:anywhere}
+.isi{overflow-x:clip}
 button.brs{width:100%;text-align:start}
 .brs.batal .kanan,.brs.batal .kiri b{text-decoration:line-through;color:var(--redup)}
 .cap{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.72rem;font-weight:700;background:var(--lunak);color:var(--daun)}
@@ -211,7 +217,7 @@ button.brs{width:100%;text-align:start}
 .kemajuan .batang{height:8px;border-radius:4px;background:var(--lunak);overflow:hidden;margin-top:8px}
 .kemajuan .batang i{display:block;height:100%;background:var(--hijau);border-radius:4px}
 .kemajuan .aksi{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.edit-brs{display:grid;grid-template-columns:1fr 140px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--garis)}
+.edit-brs{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--garis)}
 .edit-brs:first-child{border-top:0}
 .edit-brs .nm{font-weight:700;font-size:.9rem;line-height:1.25}
 .edit-brs .nm small{display:block;font-weight:500;color:var(--redup)}
@@ -219,7 +225,7 @@ button.brs{width:100%;text-align:start}
 .edit-brs .nm .gagal{color:var(--merah);font-weight:700}
 .edit-brs input{min-height:42px;padding:0 10px;border-radius:10px;border:1px solid var(--garis);width:100%;font-size:16px;text-align:end;background:var(--kertas)}
 .edit-brs input:focus{outline:none;border-color:var(--hijau);box-shadow:0 0 0 3px rgba(29,122,62,.18)}
-.edit-kepala{display:grid;grid-template-columns:1fr 140px;gap:8px;padding:10px 14px;font-size:.78rem;font-weight:700;color:var(--redup);border-bottom:1px solid var(--garis)}
+.edit-kepala{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:8px;padding:10px 14px;font-size:.78rem;font-weight:700;color:var(--redup);border-bottom:1px solid var(--garis)}
 .edit-kepala span:not(:first-child){text-align:end}
 
 .kode{display:inline-block;padding:1px 8px;border-radius:8px;font-size:.76rem;font-weight:800;letter-spacing:.02em;background:var(--daun);color:#fff;font-variant-numeric:tabular-nums}
@@ -446,6 +452,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="panel" id="terlaris"></div>
         <div class="panel" id="daftarTrx"></div>
       </div>
+      <div class="panel" id="lainLaporan" style="margin-top:14px" data-pemilik hidden></div>
     </section>
 
     <!-- ----- BARANG (admin) ----- -->
@@ -485,6 +492,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="aksi"><button class="btn kecil utama" id="simpanRekening">Simpan rekening</button></div>
         <p class="info" id="statusRekening" style="margin-top:8px" role="status"></p>
       </div>
+      <div class="panel" id="semuaLain" style="margin-top:16px" data-pemilik hidden></div>
     </section>
 
     <!-- ----- KARYAWAN (admin) ----- -->
@@ -835,7 +843,7 @@ async function bukaAplikasi(){
      yang terakhir dibuka pengguna sebelumnya), dan buang sisa laporan milik pengguna sebelumnya */
   tampilHal("kasir"); perbaruiBar();
   $("cariKasir").value = $("cariBarang").value = ""; st.kataKasir = st.kataBarang = ""; st.katKasir = st.katBarang = -1; st.tampilKasir = st.tampilBarang = PER_HALAMAN;
-  $("ringkasLaporan").innerHTML = $("terlaris").innerHTML = $("daftarTrx").innerHTML = $("daftarKaryawan").innerHTML = ""; $("waktuLaporan").textContent = "";
+  $("ringkasLaporan").innerHTML = $("terlaris").innerHTML = $("daftarTrx").innerHTML = $("daftarKaryawan").innerHTML = $("lainLaporan").innerHTML = $("semuaLain").innerHTML = ""; $("waktuLaporan").textContent = "";
   $("daftarKasir").innerHTML = ""; tampilKosongKasir("Memuat barang…", "");
   try {
     if (!ITEM.length) await muatKatalog();
@@ -875,7 +883,7 @@ function bukaHal(h){
   perbaruiBar();
   if (h === "kasir") gambarKasir();
   if (h === "laporan") muatLaporan();
-  if (h === "barang") gambarBarang();
+  if (h === "barang") { gambarBarang(); if (adalahPemilik()) muatSemuaLain(); }
   if (h === "karyawan") muatKaryawan();
   window.scrollTo(0, 0);
 }
@@ -1465,8 +1473,39 @@ function rekapBarang(sah){
     }
   return [...perBarang.values()].flatMap(grup => [...grup.values()]);
 }
+/* ---------- kotak "Barang lain", hanya tampil untuk pemilik ----------
+   Barang yang diketik manual oleh kasir (tidak ada di katalog), supaya pemilik tahu apa saja yang
+   ditambahkan dan bisa memutuskan mana yang perlu dimasukkan ke katalog. */
+function gambarLainLaporan(sah){
+  const el = $("lainLaporan"); if (!adalahPemilik()) { el.innerHTML = ""; return; }
+  const peta = new Map();
+  for (const t of sah.slice().reverse())
+    for (const i of (t.item || [])) {
+      if (!String(i.kunci || "").startsWith("lain|")) continue;
+      const k = i.kunci + "|" + i.harga, x = peta.get(k) || { nama: i.nama, harga: Number(i.harga), qty: 0, uang: 0, oleh: (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama, jam: jamTeks(t.waktu), kasir: new Set() };
+      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); x.kasir.add((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama); peta.set(k, x);
+    }
+  const daftar = [...peta.values()];
+  el.innerHTML = `<h2>Barang lain di tanggal ini <span class="cap emas">hanya pemilik</span></h2>` + (daftar.length ? daftar.map(x =>
+    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)} · pertama diketik ${esc(x.oleh)}, ${esc(x.jam)}${x.kasir.size > 1 ? " · dipakai " + x.kasir.size + " kasir" : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
+    : `<div class="kosong">Tidak ada barang yang diketik manual di tanggal ini.</div>`);
+}
+/* semua barang lain yang pernah diketik, dari yang paling baru dijual */
+async function muatSemuaLain(){
+  const el = $("semuaLain"); if (!adalahPemilik()) { el.innerHTML = ""; return; }
+  el.innerHTML = `<h2>Semua barang lain yang pernah diketik <span class="cap emas">hanya pemilik</span></h2><div class="kosong">Memuat…</div>`;
+  const { data, error } = await sb.from("barang").select("kunci,nama,harga,diubah").like("kunci", "lain|%").order("diubah", { ascending: false }).limit(500);
+  const kepala = `<h2>Semua barang lain yang pernah diketik <span class="cap emas">hanya pemilik</span></h2>`;
+  if (error) { el.innerHTML = kepala + `<div class="kosong">${esc(pesan(error))}</div>`; return; }
+  const hariIni = tglLokal(new Date());
+  el.innerHTML = kepala + `<p class="info" style="padding:0 16px 10px">Barang yang sering muncul di sini layak dimasukkan ke katalog. Daftar ini tidak memengaruhi kasir: barang lain tetap hanya berlaku pada hari dijual.</p>` +
+    ((data || []).length ? data.map(b => { const tgl = b.diubah ? new Date(b.diubah) : null, hari = tgl ? tglLokal(tgl) : "";
+      return `<div class="brs"><div class="kiri"><b>${esc(b.nama)}</b><small class="angka">terakhir dijual ${tgl ? esc(tgl.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })) : "-"}${hari === hariIni ? ` <span class="cap">hari ini</span>` : ""}</small></div><div class="kanan angka">${Number(b.harga) > 0 ? rp(b.harga) : "-"}</div></div>`; }).join("")
+    : `<div class="kosong">Belum pernah ada barang yang diketik manual.</div>`);
+}
 function gambarLaporan(){
   const sah = st.trx.filter(t => !t.batal);
+  gambarLainLaporan(sah);
   let omzet = 0, tunai = 0;
   for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); }
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
