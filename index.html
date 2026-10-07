@@ -322,13 +322,36 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       </div>
       <label class="lbl" for="fEmail">Email</label>
       <input class="isian" id="fEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email">
-      <label class="lbl" for="fSandi">Password</label>
-      <input class="isian" id="fSandi" type="password" autocomplete="current-password" minlength="6">
+      <div id="kolomSandi">
+        <label class="lbl" for="fSandi">Password</label>
+        <input class="isian" id="fSandi" type="password" autocomplete="current-password" minlength="6">
+      </div>
+      <p class="info" id="ketLupa" style="margin-top:12px" hidden>Tulis email akun kasir. Link untuk membuat password baru akan dikirim ke email itu.</p>
       <p class="galat" id="galatAuth" role="alert"></p>
+      <p class="info" id="suksesAuth" style="color:var(--hijau);font-weight:600" role="status" hidden></p>
       <button class="btn utama penuh" id="tombolAuth" type="submit">Masuk</button>
+      <p style="text-align:center;margin-top:12px"><button class="tautan" type="button" id="tautanLupa" style="font-size:.9rem">Lupa password?</button></p>
       <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Nomor ID diberikan otomatis setelah akun disetujui pemilik toko.</p>
     </form>
     <button class="pasang" data-pasang type="button" hidden><img data-logo alt="" onerror="this.remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Pasang aplikasi di HP</span></button>
+  </div>
+</div>
+
+<!-- ============ LAYAR: buat password baru (dibuka dari link di email) ============ -->
+<div class="layar" id="layarSandiBaru" hidden>
+  <div class="kotak">
+    <div class="merek">
+      <img data-logo alt="" onerror="this.remove()">
+      <div><b>Buat password baru</b><span id="emailSandiBaru"></span></div>
+    </div>
+    <form id="formSandiBaru" novalidate>
+      <label class="lbl" for="fSandiBaru">Password baru</label>
+      <input class="isian" id="fSandiBaru" type="password" autocomplete="new-password" minlength="6">
+      <label class="lbl" for="fSandiUlang">Ulangi password baru</label>
+      <input class="isian" id="fSandiUlang" type="password" autocomplete="new-password" minlength="6">
+      <p class="galat" id="galatSandiBaru" role="alert"></p>
+      <button class="btn utama penuh" id="tombolSandiBaru" type="submit">Simpan password baru</button>
+    </form>
   </div>
 </div>
 
@@ -553,7 +576,7 @@ function roti(teks, merah){
   clearTimeout(jedaRoti); jedaRoti = setTimeout(() => el.classList.remove("tampil"), merah ? 3000 : 2200);
 }
 function tampilLayar(id){
-  ["layarSetel", "layarMasuk", "layarTunggu", "aplikasi"].forEach(x => { $(x).hidden = x !== id; });
+  ["layarSetel", "layarMasuk", "layarSandiBaru", "layarTunggu", "aplikasi"].forEach(x => { $(x).hidden = x !== id; });
 }
 function pesan(e){
   const m = (e && e.message) || String(e || "");
@@ -561,6 +584,9 @@ function pesan(e){
   if (/already registered|already been registered/i.test(m)) return "Email ini sudah terdaftar. Pilih Masuk.";
   if (/Email not confirmed/i.test(m)) return "Email belum dikonfirmasi. Matikan Confirm email di Supabase, atau buka link di email.";
   if (/Password should be at least/i.test(m)) return "Password minimal 6 karakter.";
+  if (/different from the old password|same password/i.test(m)) return "Password baru harus berbeda dari password lama.";
+  if (/only request this after|security purposes/i.test(m)) return "Baru saja diminta. Tunggu sekitar satu menit, lalu coba lagi.";
+  if (/session missing|not authenticated|jwt/i.test(m)) return "Link sudah tidak berlaku. Minta link baru lewat Lupa password.";
   if (/valid email|invalid format/i.test(m)) return "Format email tidak benar.";
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
@@ -640,27 +666,40 @@ const partaiDari = k => (barang.get(k) || {}).partai || 0;        // harga parta
    MASUK / DAFTAR
    ========================================================= */
 let modeDaftar = false;
-function aturMode(daftar){
-  modeDaftar = daftar;
-  $("tabMasuk").setAttribute("aria-selected", String(!daftar));
-  $("tabDaftar").setAttribute("aria-selected", String(daftar));
-  $("kolomNama").hidden = !daftar; $("ketDaftar").hidden = !daftar;
-  $("tombolAuth").textContent = daftar ? "Daftar" : "Masuk";
-  $("fSandi").autocomplete = daftar ? "new-password" : "current-password";
-  $("galatAuth").textContent = "";
+let modeLupa = false;
+function aturMode(daftar, lupa){
+  modeDaftar = !!daftar && !lupa; modeLupa = !!lupa;
+  $("tabMasuk").setAttribute("aria-selected", String(!modeDaftar));
+  $("tabDaftar").setAttribute("aria-selected", String(modeDaftar));
+  $("kolomNama").hidden = !modeDaftar; $("ketDaftar").hidden = !modeDaftar;
+  $("kolomSandi").hidden = modeLupa; $("ketLupa").hidden = !modeLupa;
+  $("tombolAuth").textContent = modeLupa ? "Kirim link ke email" : modeDaftar ? "Daftar" : "Masuk";
+  $("tautanLupa").textContent = modeLupa ? "Kembali ke Masuk" : "Lupa password?";
+  $("tautanLupa").parentElement.hidden = modeDaftar;
+  $("fSandi").autocomplete = modeDaftar ? "new-password" : "current-password";
+  $("galatAuth").textContent = ""; $("suksesAuth").hidden = true;
 }
+$("tautanLupa").onclick = () => aturMode(false, !modeLupa);
 $("tabMasuk").onclick = () => aturMode(false);
 $("tabDaftar").onclick = () => aturMode(true);
 
 $("formAuth").addEventListener("submit", async ev => {
   ev.preventDefault();
   const email = $("fEmail").value.trim().toLowerCase(), sandi = $("fSandi").value, nama = $("fNama").value.trim();
-  const galat = $("galatAuth"); galat.textContent = "";
+  const galat = $("galatAuth"); galat.textContent = ""; $("suksesAuth").hidden = true;
   if (modeDaftar && nama.length < 2) { galat.textContent = "Isi nama lengkap."; $("fNama").focus(); return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { galat.textContent = "Format email tidak benar."; $("fEmail").focus(); return; }
-  if (sandi.length < 6) { galat.textContent = "Password minimal 6 karakter."; $("fSandi").focus(); return; }
+  if (!modeLupa && sandi.length < 6) { galat.textContent = "Password minimal 6 karakter."; $("fSandi").focus(); return; }
   const tombol = $("tombolAuth"); tombol.disabled = true; tombol.textContent = "Tunggu…";
   try {
+    if (modeLupa) {
+      /* link di email membuka halaman kasir ini lagi, lalu muncul layar "Buat password baru" */
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if (error) throw error;
+      $("suksesAuth").textContent = "Kalau email itu terdaftar, link untuk membuat password baru sudah dikirim. Cek kotak masuk dan folder spam, lalu buka link-nya.";
+      $("suksesAuth").hidden = false;
+      return;
+    }
     if (modeDaftar) {
       const { data, error } = await sb.auth.signUp({ email, password: sandi, options: { data: { nama, minta: $("fMinta").value } } });
       if (error) throw error;
@@ -675,8 +714,31 @@ $("formAuth").addEventListener("submit", async ev => {
     }
     $("fSandi").value = "";
   } catch (e) { galat.textContent = pesan(e); }
-  finally { tombol.disabled = false; tombol.textContent = modeDaftar ? "Daftar" : "Masuk"; }
+  finally { tombol.disabled = false; tombol.textContent = modeLupa ? "Kirim link ke email" : modeDaftar ? "Daftar" : "Masuk"; }
 });
+
+/* ---------- buat password baru (setelah membuka link dari email) ---------- */
+$("formSandiBaru").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const a = $("fSandiBaru").value, b = $("fSandiUlang").value, galat = $("galatSandiBaru"); galat.textContent = "";
+  if (a.length < 6) { galat.textContent = "Password minimal 6 karakter."; $("fSandiBaru").focus(); return; }
+  if (a !== b) { galat.textContent = "Dua password itu belum sama."; $("fSandiUlang").focus(); return; }
+  const tombol = $("tombolSandiBaru"); tombol.disabled = true; tombol.textContent = "Menyimpan…";
+  try {
+    const { data, error } = await sb.auth.updateUser({ password: a });
+    if (error) throw error;
+    $("fSandiBaru").value = $("fSandiUlang").value = "";
+    pemulihan = false;
+    roti("Password baru tersimpan.");
+    await setelahMasuk(data.user || pengguna);
+  } catch (e) { galat.textContent = pesan(e); }
+  finally { tombol.disabled = false; tombol.textContent = "Simpan password baru"; }
+});
+let pemulihan = false;
+function bukaSandiBaru(user){
+  pengguna = user; $("emailSandiBaru").textContent = (user && user.email) || "";
+  $("galatSandiBaru").textContent = ""; tampilLayar("layarSandiBaru");
+}
 
 async function setelahMasuk(user, nama, minta){
   pengguna = user;
@@ -1606,12 +1668,31 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     if (!window.supabase && /^https:\/\//.test(SUPABASE_URL)) $("galatSetel").textContent = "Pustaka Supabase gagal dimuat. Cek internet, lalu muat ulang halaman.";
     tampilLayar("layarSetel"); return;
   }
+  /* datang dari link "lupa password" di email? (dibaca sebelum Supabase membersihkan alamatnya) */
+  const alamat = location.hash + "&" + location.search;
+  pemulihan = /type=recovery/.test(alamat);
+  const linkGagal = /error_code=otp_expired|error=access_denied|error_description=/.test(alamat);
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange((ev, sesi) => {
+    if (ev === "PASSWORD_RECOVERY") { pemulihan = true; if (sesi && sesi.user) bukaSandiBaru(sesi.user); }
+  });
   sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
   try {
     const { data } = await sb.auth.getSession();
-    if (data && data.session) { await setelahMasuk(data.session.user); return; }
+    if (data && data.session) {
+      if (pemulihan) {
+        try { history.replaceState(null, "", location.pathname); } catch (e) {}   // supaya refresh tidak membuka layar ini lagi
+        bukaSandiBaru(data.session.user); return;
+      }
+      await setelahMasuk(data.session.user); return;
+    }
   } catch (e) { $("galatAuth").textContent = pesan(e); }
+  if (!$("layarSandiBaru").hidden) return;                 // layar password baru sudah dibuka oleh PASSWORD_RECOVERY
+  if (linkGagal || pemulihan) {
+    aturMode(false, true);
+    $("galatAuth").textContent = "Link dari email sudah tidak berlaku atau sudah pernah dipakai. Minta link baru di bawah ini.";
+    try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  }
   tampilLayar("layarMasuk");
 })();
 </script>
