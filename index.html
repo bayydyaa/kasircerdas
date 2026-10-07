@@ -81,7 +81,10 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .atas{position:sticky;top:0;z-index:20;background:var(--daun);color:#fff;padding-top:var(--aman-t)}
 .atas .baris{display:flex;align-items:center;gap:12px;max-width:1280px;margin:0 auto;padding:10px 16px}
 .atas img{width:36px;height:36px;border-radius:10px;object-fit:cover;flex:none}
-.atas .judul{flex:1;min-width:0}
+.atas .judul{flex:1;min-width:0;text-align:start;color:inherit}
+.atas button.judul>span{display:flex;gap:6px;overflow:visible}
+.atas button.judul>span>span{flex:0 1 auto;min-width:0;opacity:1;overflow:hidden;text-overflow:ellipsis}
+.atas button.judul u{flex:none;text-underline-offset:2px}
 .atas .judul b{display:block;font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .atas .judul span{font-size:.78rem;opacity:.8;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .atas .keluar{min-height:36px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.3);font-weight:700;font-size:.85rem}
@@ -371,7 +374,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
   <div class="atas">
     <div class="baris">
       <img data-logo alt="" onerror="this.remove()">
-      <div class="judul"><b>Kasir AMT</b><span id="siapa"></span></div>
+      <button class="judul" id="bukaProfil" type="button" aria-label="Ubah nama"><b>Kasir AMT</b><span><span id="siapa"></span> <u>ubah</u></span></button>
       <nav class="tab" id="tab" aria-label="Menu">
         <button data-hal="kasir" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h2l2.2 10.2a1 1 0 0 0 1 .8h7.9a1 1 0 0 0 1-.8L19.5 8H7"/><circle cx="10" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>Kasir</button>
         <button data-hal="laporan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Laporan</button>
@@ -451,7 +454,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <div class="panel kemajuan">
         <b id="teksKemajuan"></b>
         <div class="batang"><i id="batangKemajuan" style="width:0"></i></div>
-        <p class="info" style="margin-top:10px">Harga di sini hanya harga acuan: muncul sebagai saran saat kasir memasukkan barang, dan kasir tetap bisa mengetik harga lain. Harga acuan ikut berubah mengikuti harga ecer terakhir yang dipakai.</p>
+        <p class="info" style="margin-top:10px">Harga acuan adalah harga ecer. Harga ini muncul sebagai saran saat kasir memasukkan barang (juga untuk baris partai), dan kasir tetap bisa mengetik harga lain. Harga acuan ikut berubah mengikuti harga ecer terakhir yang dipakai; penjualan partai tidak mengubahnya.</p>
         <div class="aksi">
           <button class="btn kecil" id="unduhExcel">Unduh daftar (Excel)</button>
           <button class="btn kecil" id="unggahExcel">Unggah Excel yang sudah diisi</button>
@@ -509,6 +512,23 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
     <button class="btn utama penuh" id="tutupStruk" style="margin-top:8px">Selesai</button>
     <button class="btn penuh kecil" id="ubahTrx" style="margin-top:10px" hidden>Ubah transaksi ini</button>
     <button class="btn bahaya penuh kecil" id="batalTrx" style="margin-top:8px" hidden>Batalkan transaksi ini</button>
+    <button class="btn penuh kecil" id="pulihTrx" style="margin-top:8px" hidden>Kembalikan transaksi ini</button>
+    <p class="info" id="ketBatal" style="margin-top:8px;text-align:center" hidden></p>
+  </div>
+</dialog>
+
+<dialog id="dlgProfil" aria-labelledby="judulProfil">
+  <div class="dlg-isi">
+    <h2 id="judulProfil" style="font-size:1.1rem;color:var(--daun)">Profil</h2>
+    <p class="info angka" id="ketProfil" style="margin-top:6px"></p>
+    <form id="formProfil" novalidate>
+      <label class="lbl" for="fNamaProfil">Nama (tercetak di struk)</label>
+      <input class="isian" id="fNamaProfil" maxlength="30" autocomplete="off">
+      <p class="info" style="margin-top:8px">Pakai nama panggilan yang pendek supaya muat satu baris di struk. Nomor ID tidak berubah.</p>
+      <p class="galat" id="galatProfil" role="alert"></p>
+      <button class="btn utama penuh" id="simpanProfil" type="submit">Simpan nama</button>
+    </form>
+    <button class="btn penuh kecil" id="tutupProfil" style="margin-top:8px">Tutup</button>
   </div>
 </dialog>
 
@@ -591,7 +611,7 @@ function pesan(e){
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
   if (/duplicate key|kunci_kirim/i.test(m)) return "Transaksi ini sedang disimpan. Tekan Simpan sekali lagi.";
-  if (/pastikan_profil|buat_transaksi|ubah_transaksi|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
+  if (/pastikan_profil|buat_transaksi|ubah_transaksi|pulihkan_transaksi|ubah_nama|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
   return m || "Terjadi kesalahan.";
 }
 
@@ -658,8 +678,10 @@ async function muatBarang(){
     .map(([k, v]) => ({ kunci: k, nama: v.nama, ukuran: "", kat: -2, lain: true, cari: v.nama.toLowerCase() }))
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
-const hargaDari = k => (barang.get(k) || {}).harga || 0;          // harga ecer terakhir / acuan
-const partaiDari = k => (barang.get(k) || {}).partai || 0;        // harga partai terakhir
+/* Harga acuan = harga ECER terakhir. Saran harga di keranjang SELALU diambil dari sini, juga untuk baris partai:
+   harga partai tidak diisi otomatis dari penjualan partai sebelumnya, kasir menurunkannya sendiri dari harga ecer. */
+const hargaDari = k => (barang.get(k) || {}).harga || 0;
+const partaiDari = k => (barang.get(k) || {}).partai || 0;        // harga partai terakhir (hanya dicatat, tidak dipakai sebagai saran)
 
 
 /* =========================================================
@@ -771,9 +793,33 @@ async function keluar(){
 $("keluar").onclick = () => { if (!keranjang.size || confirm("Keranjang masih berisi. Tetap keluar?")) keluar(); };
 $("keluarTunggu").onclick = keluar;
 
+const tulisSiapa = () => { $("siapa").textContent = (profil.kode ? profil.kode + " · " : "") + profil.nama + " · " + (NAMA_PERAN[profil.peran] || profil.peran); };
+/* ---------- profil: ganti nama tampilan sendiri ---------- */
+$("bukaProfil").onclick = () => {
+  if (!profil) return;
+  $("ketProfil").textContent = (profil.kode || "-") + " · " + (NAMA_PERAN[profil.peran] || profil.peran) + " · " + profil.email;
+  $("fNamaProfil").value = profil.nama; $("galatProfil").textContent = "";
+  const d = $("dlgProfil"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+};
+$("tutupProfil").onclick = () => $("dlgProfil").close();
+$("formProfil").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const nama = $("fNamaProfil").value.trim().replace(/\s+/g, " "), galat = $("galatProfil"); galat.textContent = "";
+  if (nama.length < 2 || nama.length > 30) { galat.textContent = "Nama harus 2 sampai 30 huruf."; return; }
+  if (nama === profil.nama) { $("dlgProfil").close(); return; }
+  const tombol = $("simpanProfil"); tombol.disabled = true; tombol.textContent = "Menyimpan…";
+  try {
+    const { data, error } = await sb.rpc("ubah_nama", { p_nama: nama });
+    if (error) throw error;
+    profil = data; tulisSiapa(); $("dlgProfil").close();
+    roti("Nama diganti. Struk berikutnya memakai nama baru.");
+    if (st.hal === "karyawan") muatKaryawan();
+  } catch (e) { galat.textContent = pesan(e); }
+  finally { tombol.disabled = false; tombol.textContent = "Simpan nama"; }
+});
 async function bukaAplikasi(){
   const admin = adalahAdmin();
-  $("siapa").textContent = (profil.kode ? profil.kode + " · " : "") + profil.nama + " · " + (NAMA_PERAN[profil.peran] || profil.peran);
+  tulisSiapa();
   document.querySelectorAll("[data-admin]").forEach(el => { el.hidden = !admin; });
   document.querySelectorAll("[data-pemilik]").forEach(el => { el.hidden = !adalahPemilik(); });
   $("judulLaporan").textContent = admin ? "Laporan penjualan" : "Penjualan saya";
@@ -983,14 +1029,14 @@ $("isiKr").addEventListener("click", e => {
     /* satu pembeli, barang sama, sebagian ecer sebagian partai: tambah baris kedua dengan jenis sebaliknya,
        ditaruh tepat di bawah baris pertama */
     const tipe = b.tipe === "partai" ? "ecer" : "partai", baru = [];
-    for (const [i, x] of keranjang) { baru.push([i, x]); if (i === id) baru.push([k + "::" + tipe + Date.now(), { kunci: k, nama: b.nama, ukuran: b.ukuran, qty: 1, harga: tipe === "partai" ? partaiDari(k) : hargaDari(k), tipe }]); }
+    for (const [i, x] of keranjang) { baru.push([i, x]); if (i === id) baru.push([k + "::" + tipe + Date.now(), { kunci: k, nama: b.nama, ukuran: b.ukuran, qty: 1, harga: hargaDari(k), tipe }]); }
     keranjang.clear(); baru.forEach(([i, x]) => keranjang.set(i, x));
     gambarKeranjang(); if (st.hal === "kasir") gambarKasir();
   }
   else if (t && b.tipe !== t.dataset.t) {
-    /* ganti ecer/partai: kalau harga masih kosong atau masih saran lama, ganti ke saran jenis yang baru */
-    const saranLama = b.tipe === "partai" ? partaiDari(k) : hargaDari(k), saranBaru = t.dataset.t === "partai" ? partaiDari(k) : hargaDari(k);
-    if (!b.harga || b.harga === saranLama) b.harga = saranBaru || (t.dataset.t === "partai" ? 0 : b.harga);
+    /* ganti ecer/partai: harga di kolom tidak diubah. Yang tampil tetap harga acuan ecer (atau yang sudah diketik),
+       kasir yang menyesuaikan harga partainya. */
+    if (!b.harga) b.harga = hargaDari(k);
     b.tipe = t.dataset.t; gambarKeranjang();
   }
 });
@@ -1050,8 +1096,12 @@ document.querySelectorAll('input[name="metode"]').forEach(r => r.addEventListene
 $("simpanTrx").onclick = async () => {
   const tombol = $("simpanTrx"), galat = $("galatBayar"); galat.textContent = "";
   /* jaring pengaman salah ketik: harga yang jauh dari harga terakhir harus dikonfirmasi */
-  const aneh = [...keranjang].map(([, b]) => [b.kunci, b]).filter(([k, b]) => { const lama = b.tipe === "partai" ? (partaiDari(k) || hargaDari(k)) : hargaDari(k); return lama > 0 && (b.harga > lama * 2 || b.harga < lama / 2); });
-  if (aneh.length && !confirm("Harga ini jauh berbeda dari harga terakhir:\n\n" + aneh.map(([k, b]) => `${b.nama}${b.ukuran ? " " + b.ukuran : ""}: ${rp(b.harga)} (terakhir ${rp(b.tipe === "partai" ? (partaiDari(k) || hargaDari(k)) : hargaDari(k))})`).join("\n") + "\n\nSudah benar?")) return;
+  const baris = [...keranjang.values()], namaBrs = b => b.nama + (b.ukuran ? " " + b.ukuran : "");
+  const aneh = baris.filter(b => { const acuan = hargaDari(b.kunci); return acuan > 0 && (b.harga > acuan * 2 || b.harga < acuan / 2); });
+  if (aneh.length && !confirm("Harga ini jauh berbeda dari harga acuan (ecer):\n\n" + aneh.map(b => `${namaBrs(b)}: ${rp(b.harga)} (acuan ${rp(hargaDari(b.kunci))})`).join("\n") + "\n\nSudah benar?")) return;
+  /* baris Partai yang harganya masih sama persis dengan harga ecer: kemungkinan lupa diturunkan */
+  const samaEcer = baris.filter(b => b.tipe === "partai" && hargaDari(b.kunci) > 0 && b.harga === hargaDari(b.kunci));
+  if (samaEcer.length && !confirm("Baris ini ditandai Partai tetapi harganya masih sama dengan harga ecer:\n\n" + samaEcer.map(b => `${namaBrs(b)}: ${rp(b.harga)}`).join("\n") + "\n\nSudah benar?")) return;
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
     const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
@@ -1200,9 +1250,16 @@ function bukaStruk(t, baru){
   $("isiStruk").innerHTML = htmlStruk(t);
   siapkanFoto(t);
   $("tutupStruk").textContent = baru ? "Selesai" : "Tutup";
-  /* Batalkan: hanya pemilik. Ubah: pemilik kapan saja; admin dan karyawan hanya transaksi miliknya
+  /* Batalkan: admin dan pemilik. Ubah: pemilik kapan saja; admin dan karyawan hanya transaksi miliknya
      sendiri dalam 15 menit setelah disimpan (server memeriksa ulang aturan yang sama). */
-  $("batalTrx").hidden = !(adalahPemilik() && !t.batal && !baru);
+  $("batalTrx").hidden = !(adalahAdmin() && !t.batal && !baru);
+  /* yang sudah dibatalkan hanya bisa dikembalikan oleh pemilik */
+  $("pulihTrx").hidden = !(adalahPemilik() && t.batal);
+  const ket = $("ketBatal");
+  ket.hidden = !(t.batal || t.pulih_oleh);
+  ket.textContent = t.batal
+    ? "Dibatalkan oleh " + (t.batal_oleh || "-") + (t.batal_waktu ? ", " + waktuTeks(t.batal_waktu) : "") + "." + (adalahPemilik() ? "" : " Hanya pemilik yang bisa mengembalikannya.")
+    : t.pulih_oleh ? "Pernah dibatalkan" + (t.batal_oleh ? " oleh " + t.batal_oleh : "") + ", dikembalikan oleh " + t.pulih_oleh + (t.pulih_waktu ? ", " + waktuTeks(t.pulih_waktu) : "") + "." : "";
   $("ubahTrx").hidden = !bolehUbah(t);
   $("ubahTrx").textContent = adalahPemilik() ? "Ubah transaksi ini" : "Ubah transaksi ini (" + sisaUbah(t) + " menit lagi)";
   const d = $("dlgStruk"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
@@ -1227,8 +1284,18 @@ function barisStruk(t, kol){
     hasil.push(baris); return hasil; };
   const tengah = (teks, tebal, besar) => bungkus(teks, kol).forEach(x => brs.push({ teks: x, tengah: true, tebal, besar }));
   const kiri = teks => bungkus(teks, kol).forEach(x => brs.push({ teks: x }));
-  const dua = (a, b, tebal) => { b = ascii(b); const k = bungkus(a, Math.max(4, kol - b.length - 1));
-    k.forEach((x, i) => brs.push({ teks: i === k.length - 1 ? x + " ".repeat(Math.max(1, kol - x.length - b.length)) + b : x, tebal })); };
+  const dua = (a, b, tebal) => {
+    a = ascii(a); b = ascii(b);
+    if (a.length + 1 + b.length <= kol) { brs.push({ teks: a + " ".repeat(kol - a.length - b.length) + b, tebal }); return; }
+    if (b.length <= kol - 8) {                    // kiri yang kepanjangan: bungkus kirinya, kanan menempel di baris terakhir
+      const k = bungkus(a, kol - b.length - 1);
+      k.forEach((x, i) => brs.push({ teks: i === k.length - 1 ? x + " ".repeat(kol - x.length - b.length) + b : x, tebal }));
+      return;
+    }
+    /* kanan yang kepanjangan (mis. nama kasir panjang): label di barisnya sendiri, isinya di bawah rata kanan */
+    bungkus(a, kol).forEach(x => brs.push({ teks: x, tebal }));
+    bungkus(b, kol).forEach(x => brs.push({ teks: " ".repeat(kol - x.length) + x, tebal }));
+  };
   const garis = () => brs.push({ teks: "-".repeat(kol) });
   tengah(TOKO.nama, true, true); tengah(TOKO.alamat); TOKO.kontak.forEach(k => tengah(k));
   if (t.batal) tengah("*** DIBATALKAN ***", true);
@@ -1342,6 +1409,17 @@ $("batalTrx").onclick = async () => {
     gambarLaporan(); try { await muatBarang(); } catch (e) {}
   } catch (e) { roti(pesan(e), true); }
 };
+$("pulihTrx").onclick = async () => {
+  const t = st.struk;
+  if (!confirm(`Kembalikan transaksi ${t.nomor}? Transaksi ini akan dihitung lagi di laporan.`)) return;
+  try {
+    const { data, error } = await sb.rpc("pulihkan_transaksi", { p_id: t.id });
+    if (error) throw error;
+    $("dlgStruk").close(); roti("Transaksi dikembalikan.");
+    const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data;
+    gambarLaporan();
+  } catch (e) { roti(pesan(e), true); }
+};
 
 /* =========================================================
    LAPORAN HARIAN
@@ -1391,7 +1469,7 @@ function gambarLaporan(){
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
   const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
   $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + (st.trx.length ? st.trx.map(t =>
-    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
+    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
     : `<div class="kosong">Belum ada transaksi di tanggal ini.</div>`);
 }
 
