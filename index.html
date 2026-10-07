@@ -947,9 +947,10 @@ function nilaiKata(q, tok){
 }
 function cariMirip(teks, batas){
   const qs = kataDari(teks); if (!qs.length) return [];
-  /* Sampai 2 kata: semuanya harus cocok. Lebih dari itu: paling sedikit separuhnya, dan kata PERTAMA
-     (biasanya nama barangnya) wajib cocok, supaya kata umum seperti "ecer" atau "1" saja tidak dianggap mirip. */
-  const butuh = qs.length <= 2 ? qs.length : Math.ceil(qs.length * 0.5), hariIni = tglLokal(new Date()), hasil = [];
+  /* Paling sedikit separuh kata harus cocok, dan kata PERTAMA (biasanya nama barangnya) wajib cocok,
+     supaya kata umum seperti "ecer" atau "1" saja tidak dianggap mirip. Ukuran yang ditulis berbeda
+     ("15g", "400ml") tidak menggagalkan pencarian. */
+  const butuh = Math.max(1, Math.ceil(qs.length * 0.5)), hariIni = tglLokal(new Date()), hasil = [];
   for (const it of ITEM.concat(LAIN.filter(x => x.hari === hariIni))) {
     let kena = 0, skor = 0, pertama = false;
     for (let n = 0; n < qs.length; n++) { const q = qs[n]; let terbaik = 0; for (const tok of it.kata) { const v = nilaiKata(q, tok); if (v > terbaik) { terbaik = v; if (v === 2) break; } } if (terbaik) { kena++; skor += terbaik; if (n === 0) pertama = true; } }
