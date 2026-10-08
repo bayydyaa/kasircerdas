@@ -411,6 +411,10 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
           <div class="kosong panel" id="kosongKasir" hidden></div>
           <div class="lebih" id="lebihKasir" hidden><button class="btn">Tampilkan lebih banyak</button></div>
           <div class="baris-lain"><button class="btn kecil" id="tambahLain">Barang tidak ada di daftar? Ketik sendiri</button></div>
+          <div class="baris-lain" id="barisMinta" hidden style="flex-direction:column;align-items:center;gap:8px">
+            <p class="info" style="text-align:center">Barangnya tidak ada di daftar? Minta admin atau pemilik menambahkannya, lalu tekan Cari lagi.</p>
+            <button class="btn kecil" id="cariLagi">Cari lagi</button>
+          </div>
         </div>
 
         <aside class="keranjang" id="keranjang" aria-labelledby="judulKr">
@@ -973,7 +977,7 @@ function tampilKosongKasir(judul, isi, cobaLagi){
 /* Semua barang katalog tampil. Harga TIDAK dikunci: kasir mengetik harga di keranjang,
    harga terakhir hanya muncul sebagai saran. */
 function gambarKasir(){
-  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; $("catatanMirip").hidden = true; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
+  if (st.gagalMuat) { $("daftarKasir").innerHTML = ""; $("catatanMirip").hidden = true; $("barisMinta").hidden = true; tampilKosongKasir("Gagal memuat data", st.gagalMuat, true); return; }
   const kata = st.kataKasir;
   let hasil = ITEM.filter(it => cocok(it, st.katKasir, kata)).concat(st.katKasir < 0 && kata ? LAIN.filter(it => it.hari === tglLokal(new Date()) && cocok(it, -1, kata)) : []);
   /* tidak ada yang persis sama: coba cari yang ejaannya mirip (di semua kategori) */
@@ -981,8 +985,22 @@ function gambarKasir(){
   if (pakaiMirip) hasil = cariMirip(kata, 8);
   $("catatanMirip").hidden = !(pakaiMirip && hasil.length);
   const el = $("daftarKasir");
+  /* menambah "barang lain" hanya untuk admin dan pemilik; karyawan hanya memilih dari daftar */
+  const bolehLain = adalahAdmin();
+  $("tambahLain").hidden = !bolehLain;
+  $("barisMinta").hidden = bolehLain || !kata;          // karyawan yang sedang mencari: petunjuk minta admin + tombol Cari lagi
   $("tambahLain").textContent = kata ? `Tambah "${$("cariKasir").value.trim()}" sebagai barang lain` : "Barang tidak ada di daftar? Ketik sendiri";
-  if (!hasil.length) { el.innerHTML = ""; tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri."); return; }
+  /* karyawan tidak menemukan yang persis: mungkin admin baru saja menambahkannya. Ambil daftar terbaru (paling sering 15 detik sekali). */
+  if (!bolehLain && pakaiMirip && Date.now() - (st.segarBarang || 0) > 15000) {
+    st.segarBarang = Date.now();
+    muatBarang().then(() => { if (st.hal === "kasir" && st.kataKasir === kata) gambarKasir(); }, () => {});
+  }
+  if (!hasil.length) {
+    el.innerHTML = "";
+    if (bolehLain) tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri.");
+    else tampilKosongKasir("Barang tidak ada di daftar", "Coba kata lain dulu. Kalau memang tidak ada, minta admin atau pemilik menambahkannya, lalu tekan Cari lagi.");
+    return;
+  }
   $("kosongKasir").hidden = true;
   el.innerHTML = hasil.slice(0, st.tampilKasir).map(it => {
     const q = barisDari(it.kunci).reduce((a, [, b]) => a + b.qty, 0), h = hargaDari(it.kunci);
@@ -1010,13 +1028,30 @@ function tambahKeKeranjang(kunci, nama, ukuran){
   ubahQty(kunci, 1);
 }
 /* barang yang tidak ada di katalog: nama diketik sendiri */
+$("cariLagi").onclick = async () => {
+  const b = $("cariLagi"); b.disabled = true; b.textContent = "Mencari…"; st.segarBarang = Date.now();
+  try { await muatBarang(); } catch (e) {}
+  b.disabled = false; b.textContent = "Cari lagi"; gambarKasir();
+};
 $("tambahLain").onclick = () => {
+  if (!adalahAdmin()) return;
   const nama = (prompt("Nama barang (tulis lengkap dengan ukurannya, mis. Paranet ecer 1 m):", $("cariKasir").value.trim()) || "").trim().replace(/\s+/g, " ").slice(0, 80);
   if (nama.length < 2) return;
   const kunciLain = "lain|" + nama.toLowerCase(), simpanan = barang.get(kunciLain), lama = simpanan && simpanan.hari === tglLokal(new Date()) ? simpanan : null;
   if (simpanan && !lama) barang.delete(kunciLain);         // sisa kemarin (kasir dibiarkan terbuka): jangan sarankan harganya
   const bukaKr = () => { if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka"); };
-  const tetapTambah = () => { tambahKeKeranjang(kunciLain, lama && lama.nama ? lama.nama : nama, ""); bukaKr(); };
+  const tetapTambah = () => {
+    const namaPakai = lama && lama.nama ? lama.nama : nama;
+    /* daftarkan dulu ke database (tanpa mengubah harga yang sudah ada), supaya hari ini karyawan juga bisa
+       memilih barang ini walaupun admin belum menyimpan penjualannya */
+    if (!lama) {
+      const hariIni = tglLokal(new Date());
+      barang.set(kunciLain, { harga: 0, partai: 0, nama: namaPakai, hari: hariIni });
+      if (!LAIN.some(x => x.kunci === kunciLain)) LAIN.push({ kunci: kunciLain, nama: namaPakai, ukuran: "", kat: -2, lain: true, hari: hariIni, cari: namaPakai.toLowerCase(), kata: kataDari(namaPakai) });
+      sb.from("barang").upsert({ kunci: kunciLain, nama: namaPakai, ukuran: "", diubah: new Date().toISOString() }).then(r => { if (r && r.error) roti("Barang lain belum terdaftar untuk kasir lain: " + pesan(r.error), true); }, () => {});
+    }
+    tambahKeKeranjang(kunciLain, namaPakai, ""); bukaKr();
+  };
   /* sebelum menambah, tunjukkan barang di daftar yang namanya mirip: sering kali barangnya sudah ada,
      hanya beda ejaan */
   const mirip = lama ? [] : cariMirip(nama, 5).filter(it => it.kunci !== kunciLain);
@@ -1685,15 +1720,16 @@ function buatXlsxLaporan(){
 }
 
 /* ---------- lembar PENJUALAN: satu transaksi satu blok, seperti buku penjualan harian ----------
-   Kolom: No, Jam, No. transaksi, Nama customer, Jenis barang, Qty, Harga, Jumlah, Total, Bayar, Dicatat oleh.
+   Kolom: No, Tanggal, Jam, Nama customer, Jenis barang, Qty, Harga, Jumlah, Total, Bayar, Dicatat oleh.
    Transaksi dengan beberapa barang memakai beberapa baris; kolom miliknya (No sampai Customer, Total sampai
    Dicatat oleh) digabung ke bawah. Urut dari penjualan paling awal. Yang dibatalkan tidak ikut. */
+const tglTeks = iso => { const d = new Date(iso); return String(d.getDate()).padStart(2, "0") + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + d.getFullYear(); };
 function susunPenjualan(){
   const sah = st.trx.filter(t => !t.batal).slice().reverse(), [y, m, d] = $("tglLaporan").value.split("-");
   const sel = [], gabung = [], K = (v, g) => ({ v, g }), brs = () => sel.length + 1;
   sel.push([K(`PENJUALAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:K1");
   sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:K2");
-  sel.push(["NO", "JAM", "NO. TRANSAKSI", "NAMA CUSTOMER", "JENIS BARANG", "QTY", "HARGA", "JUMLAH", "TOTAL", "BAYAR", "DICATAT OLEH"].map(t => K(t, 2)));
+  sel.push(["NO", "TANGGAL", "JAM", "NAMA CUSTOMER", "JENIS BARANG", "QTY", "HARGA", "JUMLAH", "TOTAL", "BAYAR", "DICATAT OLEH"].map(t => K(t, 2)));
   let total = 0, tf = 0;
   sah.forEach((t, n) => {
     const item = t.item && t.item.length ? t.item : [{ nama: "-", qty: 0, harga: 0, jumlah: 0 }], awal = brs();
@@ -1702,7 +1738,7 @@ function susunPenjualan(){
     item.forEach((i, k) => {
       const pertama = k === 0;
       sel.push([
-        K(pertama ? n + 1 : "", 4), K(pertama ? jamTeks(t.waktu) : "", 4), K(pertama ? (t.nomor || "#" + t.id) : "", 8), K(pertama ? (t.pembeli || "") : "", 3),
+        K(pertama ? n + 1 : "", 4), K(pertama ? tglTeks(t.waktu) : "", 8), K(pertama ? jamTeks(t.waktu) : "", 4), K(pertama ? (t.pembeli || "") : "", 3),
         K(i.nama + (i.ukuran ? " " + i.ukuran : "") + (i.tipe === "partai" ? " (partai)" : ""), 3), K(Number(i.qty), 4), K(Number(i.harga), 5), K(jumlahItem(i), 5),
         K(pertama ? Number(t.total) : "", 7), K(pertama ? bayar.trim() : "", 8), K(pertama ? ((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama) : "", 8),
       ]);
@@ -1717,7 +1753,7 @@ function susunPenjualan(){
 }
 function buatXlsxPenjualan(){
   const { sel, gabung } = susunPenjualan();
-  return buatXlsx(sel, gabung, [5, 7, 18, 18, 40, 7, 12, 13, 13, 20, 20], "Penjualan", true);
+  return buatXlsx(sel, gabung, [5, 12, 7, 20, 40, 7, 12, 13, 13, 20, 20], "Penjualan", true);
 }
 /* di HP (terutama aplikasi yang dipasang di iPhone) unduhan biasa sering tidak jalan: pakai menu bagikan */
 function serahkanBerkas(blob, nama){
