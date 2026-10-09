@@ -1598,8 +1598,14 @@ function rekapBarang(sah){
   const rapi = t => String(t == null ? "" : t).replace(/\s+/g, " ").trim();
   const perNama = new Map();                         // nama lengkap -> (harga -> baris); kunci penggabungan
   const perProduk = new Map();                       // nama dasar -> daftar nama lengkap; hanya untuk urutan
+  /* Barang yang SAMA (kode barangnya sama) selalu memakai satu nama, yaitu nama pada penjualan TERAKHIR hari
+     itu. Jadi kalau nama sebuah barang berubah di tengah hari (mis. mereknya dihilangkan, atau namanya
+     dibetulkan di katalog), penjualannya tetap terkumpul di satu baris, tidak pecah jadi dua. */
+  const namaTerakhir = new Map();
+  for (const t of sah) for (const i of (t.item || [])) if (i.kunci && !namaTerakhir.has(i.kunci)) namaTerakhir.set(i.kunci, { nama: i.nama, ukuran: i.ukuran });
   for (const t of sah.slice().reverse())
-    for (const i of (t.item || [])) {
+    for (const i0 of (t.item || [])) {
+      const i = i0.kunci && namaTerakhir.has(i0.kunci) ? Object.assign({}, i0, namaTerakhir.get(i0.kunci)) : i0;
       const partai = i.tipe === "partai", nama = rapi(i.nama + (i.ukuran ? " " + i.ukuran : "")), kunciNama = nama.toLowerCase();
       let grup = perNama.get(kunciNama);
       if (!grup) {
