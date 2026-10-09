@@ -627,7 +627,7 @@ function pesan(e){
   if (/Password should be at least/i.test(m)) return "Password minimal 6 karakter.";
   if (/different from the old password|same password/i.test(m)) return "Password baru harus berbeda dari password lama.";
   if (/only request this after|security purposes/i.test(m)) return "Baru saja diminta. Tunggu sekitar satu menit, lalu coba lagi.";
-  if (/session missing|not authenticated|jwt/i.test(m)) return "Link sudah tidak berlaku. Minta link baru lewat Lupa password.";
+  if (/session missing|not authenticated|jwt/i.test(m)) return "Sesi masuk sudah berakhir. Tutup kasir, buka lagi, lalu masuk ulang.";
   if (/valid email|invalid format/i.test(m)) return "Format email tidak benar.";
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
@@ -790,7 +790,7 @@ $("formSandiBaru").addEventListener("submit", async ev => {
     pemulihan = false;
     roti("Password baru tersimpan.");
     await setelahMasuk(data.user || pengguna);
-  } catch (e) { galat.textContent = pesan(e); }
+  } catch (e) { galat.textContent = /session missing|not authenticated|jwt/i.test((e && e.message) || "") ? "Link sudah tidak berlaku. Minta link baru lewat Lupa password." : pesan(e); }
   finally { tombol.disabled = false; tombol.textContent = "Simpan password baru"; }
 });
 let pemulihan = false;
@@ -805,15 +805,17 @@ async function setelahMasuk(user, nama, minta){
   const { data, error } = await sb.rpc("pastikan_profil", { p_nama: nama || meta.nama || "", p_minta: minta || meta.minta || "karyawan" });
   if (error) throw error;
   profil = data;
-  if (!profil.aktif) {
-    $("emailTunggu").textContent = profil.email; $("galatTunggu").textContent = "";
-    $("judulTunggu").textContent = profil.dihapus ? "Akun ini sudah dihapus" : "Menunggu persetujuan pemilik";
-    $("teksTunggu").textContent = profil.dihapus
-      ? "Akun ini sudah tidak bisa memakai kasir. Hubungi pemilik toko kalau ini keliru."
-      : "Akun sudah terdaftar. Pemilik toko yang menentukan Anda sebagai karyawan atau admin dan menyetujuinya di menu Akun. Setelah itu tekan tombol di bawah. Nomor ID diberikan saat disetujui.";
-    tampilLayar("layarTunggu"); return;
-  }
+  if (!profil.aktif) { tampilTunggu(); return; }
   await bukaAplikasi();
+}
+function tampilTunggu(){
+  $("emailTunggu").textContent = profil.email; $("galatTunggu").textContent = "";
+  $("judulTunggu").textContent = profil.dihapus ? "Akun ini sudah dihapus" : "Menunggu persetujuan pemilik";
+  $("teksTunggu").textContent = profil.dihapus
+    ? "Akun ini sudah tidak bisa memakai kasir. Hubungi pemilik toko kalau ini keliru."
+    : "Akun sudah terdaftar. Pemilik toko yang menentukan Anda sebagai karyawan atau admin dan menyetujuinya di menu Akun. Setelah itu tekan tombol di bawah. Nomor ID diberikan saat disetujui.";
+  document.body.classList.remove("kr-buka");
+  tampilLayar("layarTunggu");
 }
 $("cekLagi").onclick = async () => {
   $("galatTunggu").textContent = "";
@@ -823,7 +825,7 @@ $("cekLagi").onclick = async () => {
 async function keluar(){
   try { await sb.auth.signOut(); } catch (e) {}
   st.drafSiap = false; buangDraf();
-  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.ubah = null; st.benihKirim = null; aturPitaUbah();
+  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.ubah = null; st.benihKirim = null; aturPitaUbah();
   document.body.classList.remove("kr-buka");
   aturMode(false); tampilLayar("layarMasuk");
 }
@@ -854,12 +856,16 @@ $("formProfil").addEventListener("submit", async ev => {
   } catch (e) { galat.textContent = pesan(e); }
   finally { tombol.disabled = false; tombol.textContent = "Simpan nama"; }
 });
-async function bukaAplikasi(){
+/* tampilkan nama, ID, dan menu sesuai peran akun */
+function terapkanPeran(){
   const admin = adalahAdmin();
   tulisSiapa();
   document.querySelectorAll("[data-admin]").forEach(el => { el.hidden = !admin; });
   document.querySelectorAll("[data-pemilik]").forEach(el => { el.hidden = !adalahPemilik(); });
   $("judulLaporan").textContent = admin ? "Laporan penjualan" : "Penjualan saya";
+}
+async function bukaAplikasi(){
+  terapkanPeran();
   tampilLayar("aplikasi");
   /* selalu mulai dari halaman Kasir (kalau tidak, pesan gagal memuat bisa tersembunyi di balik halaman lain
      yang terakhir dibuka pengguna sebelumnya), dan buang sisa laporan milik pengguna sebelumnya */
@@ -875,11 +881,61 @@ async function bukaAplikasi(){
   st.gagalMuat = "";
   gambarChip("katKasir", "katKasir", gambarKasir);
   gambarChip("katBarang", "katBarang", gambarBarang);
+  st.segarData = Date.now();
   const pulih = pulihkanDraf(); st.drafSiap = true;
   aturPitaUbah(); bukaHal("kasir"); gambarKeranjang();
   if (pulih) roti(st.ubah ? "Perubahan " + st.ubah.nomor + " yang belum disimpan dikembalikan." : "Keranjang yang belum disimpan dikembalikan.");
   if (adalahPemilik()) hitungTunggu();
 }
+
+/* ---------- data ikut diperbarui selama kasir terbuka ----------
+   Kasir sering dibiarkan terbuka seharian, apalagi kalau dipasang sebagai aplikasi. Tanpa ini, barang yang
+   baru ditambahkan ke katalog dan perubahan peran dari pemilik baru terlihat setelah kasir ditutup lalu dibuka.
+   - Saat kasir dibuka lagi dari latar belakang, dan tiap 10 menit selama terbuka: ambil ulang profil akun,
+     daftar barang katalog, dan harga acuan (paling sering 5 menit sekali).
+   - Saat menekan "Cari lagi", atau mencari barang yang tidak ketemu: ambil ulang katalog dan harga acuan.
+   Kalau sedang tidak ada sinyal, data yang lama tetap dipakai. Isi keranjang tidak disentuh. */
+const JEDA_SEGAR = 5 * 60 * 1000;
+let sedangSegar = null;
+function segarkanData(paksa){
+  if (!profil || !profil.aktif || $("aplikasi").hidden) return Promise.resolve();
+  if (sedangSegar) return sedangSegar;
+  if (!paksa && Date.now() - (st.segarData || 0) < JEDA_SEGAR) return Promise.resolve();
+  st.segarData = Date.now();
+  sedangSegar = (async () => {
+    try { await muatKatalog(); } catch (e) {}
+    try { await muatBarang(); } catch (e) {}
+    if (!profil || $("aplikasi").hidden) return;
+    if (st.hal === "kasir") gambarKasir(); else if (st.hal === "barang") gambarKemajuan();
+  })().finally(() => { sedangSegar = null; });
+  return sedangSegar;
+}
+/* peran atau status akun bisa diubah pemilik saat kasir sedang terbuka */
+async function segarkanProfil(){
+  if (!profil || $("aplikasi").hidden) return;
+  const idLama = profil.id;
+  let data = null;
+  try { const r = await sb.rpc("pastikan_profil", { p_nama: "", p_minta: "karyawan" }); if (r.error) return; data = r.data; } catch (e) { return; }
+  if (!data || !profil || profil.id !== idLama || data.id !== idLama) return;
+  if (data.peran === profil.peran && data.aktif === profil.aktif && data.kode === profil.kode && data.nama === profil.nama && data.dihapus === profil.dihapus) return;
+  const peranLama = profil.peran;
+  profil = data;
+  if (!profil.aktif) { st.ubah = null; aturPitaUbah(); tampilTunggu(); return; }       // akun dinonaktifkan pemilik
+  terapkanPeran();
+  if (peranLama !== profil.peran) {
+    roti("Peran akun ini sekarang " + (NAMA_PERAN[profil.peran] || profil.peran) + ".");
+    const krBuka = document.body.classList.contains("kr-buka");
+    bukaHal(st.hal);                                   // menu yang tidak lagi boleh dibuka otomatis kembali ke Kasir
+    if (krBuka && st.hal === "kasir" && keranjang.size) document.body.classList.add("kr-buka");
+  }
+}
+function segarkanBerkala(){
+  if (document.hidden || !profil || $("aplikasi").hidden) return;
+  if (Date.now() - (st.segarData || 0) < JEDA_SEGAR) return;
+  segarkanProfil().then(() => segarkanData(), () => {});
+}
+document.addEventListener("visibilitychange", segarkanBerkala);
+setInterval(segarkanBerkala, 10 * 60 * 1000);
 
 async function muatRekening(){
   const { data, error } = await sb.from("pengaturan").select("kunci,nilai").eq("kunci", "rekening");
@@ -1000,6 +1056,9 @@ function gambarKasir(){
     st.segarBarang = Date.now();
     muatBarang().then(() => { if (st.hal === "kasir" && st.kataKasir === kata) gambarKasir(); }, () => {});
   }
+  /* siapa pun yang tidak menemukan barangnya: mungkin baru saja ditambahkan ke katalog. Ambil ulang katalog
+     (paling sering 1 menit sekali); kalau barangnya ada, daftar di layar ikut berganti. */
+  if (pakaiMirip && Date.now() - (st.segarData || 0) > 60000) segarkanData(true);
   if (!hasil.length) {
     el.innerHTML = "";
     if (bolehLain) tampilKosongKasir("Barang tidak ditemukan", "Coba kata lain, atau pakai tombol di bawah untuk mengetik nama barangnya sendiri.");
@@ -1035,7 +1094,7 @@ function tambahKeKeranjang(kunci, nama, ukuran){
 /* barang yang tidak ada di katalog: nama diketik sendiri */
 $("cariLagi").onclick = async () => {
   const b = $("cariLagi"); b.disabled = true; b.textContent = "Mencari…"; st.segarBarang = Date.now();
-  try { await muatBarang(); } catch (e) {}
+  try { await segarkanData(true); } catch (e) {}                 // katalog + harga acuan + barang lain hari ini
   b.disabled = false; b.textContent = "Cari lagi"; gambarKasir();
 };
 $("tambahLain").onclick = () => {
@@ -1571,13 +1630,16 @@ async function muatLaporan(diam){
   const el = $("tglLaporan"), hariIni = tglLokal(new Date());
   /* ganti hari (aplikasi dibiarkan terbuka semalaman): kembali ke tanggal hari ini */
   if (!el.value || st.hariLaporan !== hariIni) { el.value = hariIni; st.hariLaporan = hariIni; }
-  const urut = st.urutLaporan = (st.urutLaporan || 0) + 1;
-  const [y, m, d] = el.value.split("-").map(Number), awal = new Date(y, m - 1, d), akhir = new Date(y, m - 1, d + 1);
-  if (!diam) { $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`; }
+  const urut = st.urutLaporan = (st.urutLaporan || 0) + 1, tgl = el.value;
+  const [y, m, d] = tgl.split("-").map(Number), awal = new Date(y, m - 1, d), akhir = new Date(y, m - 1, d + 1);
+  /* data di layar milik tanggal lain (baru ganti tanggal, atau baru ganti hari): kosongkan dulu, supaya
+     unduhan tidak sempat memakai isi tanggal lama dengan judul tanggal baru */
+  if (st.tglTrx !== tgl) { st.trx = []; st.tglTrx = null; }
+  if (!diam || !st.tglTrx) { $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("lainLaporan").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`; }
   const { data, error } = await sb.from("transaksi").select("*").gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString()).order("waktu", { ascending: false }).limit(1000);
   if (urut !== st.urutLaporan) return;                         // sudah ada permintaan yang lebih baru
-  if (error) { if (!diam) $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
-  st.trx = data || []; gambarLaporan();
+  if (error) { if (!diam || !st.tglTrx) $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
+  st.trx = data || []; st.tglTrx = tgl; gambarLaporan();
   $("waktuLaporan").textContent = "Data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 /* selama menu Laporan terbuka, data diperbarui sendiri tiap menit dan saat aplikasi dibuka lagi,
@@ -1800,11 +1862,15 @@ function serahkanBerkas(blob, nama){
     navigator.share({ files: [f] }).catch(e => { if (!e || e.name !== "AbortError") unduh(); });
   } else unduh();
 }
+/* unduhan hanya boleh dibuat dari data yang memang milik tanggal yang sedang dipilih */
+const laporanSiap = () => { if (st.tglTrx === $("tglLaporan").value) return true; roti("Laporan tanggal ini belum selesai dimuat. Tunggu sebentar, atau tekan Muat ulang.", true); return false; };
 $("eksporPenjualan").onclick = () => {
+  if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxPenjualan(), "penjualan-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
 };
 $("eksporLaporan").onclick = () => {
+  if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxLaporan(), "rekap-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
 };
@@ -1846,6 +1912,7 @@ $("daftarBarang").addEventListener("input", e => { if (e.target.matches(".f-harg
 $("daftarBarang").addEventListener("change", async e => {
   const brs = e.target.closest(".edit-brs"); if (!brs) return;
   const it = petaItem.get(brs.dataset.k), ket = brs.querySelector(".ket-simpan");
+  if (!it) { ket.className = "ket-simpan gagal"; ket.textContent = "barang ini sudah tidak ada di katalog"; return; }
   const harga = angkaDari(brs.querySelector(".f-harga").value);
   ket.className = "ket-simpan"; ket.textContent = "menyimpan…";
   const { error } = await sb.from("barang").upsert({ kunci: it.kunci, nama: it.nama, ukuran: it.ukuran, harga, diubah: new Date().toISOString() });
@@ -2003,7 +2070,7 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
   sb.auth.onAuthStateChange((ev, sesi) => {
     if (ev === "PASSWORD_RECOVERY") { pemulihan = true; if (sesi && sesi.user) bukaSandiBaru(sesi.user); }
   });
-  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
+  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
   try {
     const { data } = await sb.auth.getSession();
     if (data && data.session) {
