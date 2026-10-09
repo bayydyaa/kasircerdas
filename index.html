@@ -653,17 +653,26 @@ async function muatKatalog(){
   }
   if (!Array.isArray(data) || !data.length) throw new Error("Data produk tidak ditemukan di " + ALAMAT_KATALOG + ". Cek ALAMAT_KATALOG di bagian atas file.");
   ITEM = []; petaItem.clear();
+  /* Nama barang di kasir = nama produk di katalog, TANPA merek. Merek hanya ditambahkan (dalam kurung) kalau
+     tanpa merek ada dua produk berbeda yang nama dan ukurannya jadi sama persis, supaya tidak tertukar.
+     Merek tetap bisa dipakai untuk mencari. */
+  const rapi = t => String(t).replace(/\s+/g, " ").trim().toLowerCase(), daftar = [], hitung = new Map();
   for (const p of data) {
     if (!Array.isArray(p) || typeof p[1] !== "string") continue;
     const slug = String(p[4] || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
     if (!slug) continue;
-    const nama = p[1].trim() + (p[2] ? " (" + String(p[2]).trim() + ")" : "");
-    const kat = Number(p[0]) || 0;
     const uk = (Array.isArray(p[3]) ? p[3] : []).filter(v => Array.isArray(v) && typeof v[0] === "string" && v[0].trim()).map(v => v[0].trim());
-    for (const u of (uk.length ? uk : [""])) {
-      const kunci = slug + "|" + u;
+    const x = { slug, nama: p[1].replace(/\s+/g, " ").trim(), merek: p[2] ? String(p[2]).replace(/\s+/g, " ").trim() : "", kat: Number(p[0]) || 0, uk: uk.length ? uk : [""] };
+    daftar.push(x);
+    for (const u of x.uk) { const k = rapi(x.nama) + "|" + rapi(u); if (!hitung.has(k)) hitung.set(k, new Set()); hitung.get(k).add(slug); }
+  }
+  for (const x of daftar) {
+    for (const u of x.uk) {
+      const kunci = x.slug + "|" + u;
       if (petaItem.has(kunci)) continue;
-      const it = { kunci, nama, ukuran: u, kat, cari: (nama + " " + u).toLowerCase(), kata: kataDari(nama + " " + u) };
+      const kembar = hitung.get(rapi(x.nama) + "|" + rapi(u)).size > 1;
+      const nama = x.nama + (kembar && x.merek ? " (" + x.merek + ")" : "");
+      const it = { kunci, nama, ukuran: u, kat: x.kat, cari: (x.nama + " " + x.merek + " " + u).toLowerCase(), kata: kataDari(x.nama + " " + x.merek + " " + u) };
       ITEM.push(it); petaItem.set(kunci, it);
     }
   }
