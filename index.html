@@ -325,11 +325,6 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <div id="kolomNama" hidden>
         <label class="lbl" for="fNama">Nama lengkap</label>
         <input class="isian" id="fNama" autocomplete="name" maxlength="60">
-        <label class="lbl" for="fMinta">Daftar sebagai</label>
-        <select class="isian" id="fMinta">
-          <option value="karyawan">Karyawan (ID kar…)</option>
-          <option value="admin">Admin (ID adm…)</option>
-        </select>
       </div>
       <label class="lbl" for="fEmail">Email</label>
       <input class="isian" id="fEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email">
@@ -342,7 +337,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
       <p class="info" id="suksesAuth" style="color:var(--hijau);font-weight:600" role="status" hidden></p>
       <button class="btn utama penuh" id="tombolAuth" type="submit">Masuk</button>
       <p style="text-align:center;margin-top:12px"><button class="tautan" type="button" id="tautanLupa" style="font-size:.9rem">Lupa password?</button></p>
-      <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Nomor ID diberikan otomatis setelah akun disetujui pemilik toko.</p>
+      <p class="info" id="ketDaftar" style="margin-top:12px" hidden>Pemilik toko yang menentukan Anda sebagai karyawan atau admin. Nomor ID diberikan setelah akun disetujui.</p>
     </form>
     <button class="pasang" data-pasang type="button" hidden><img data-logo alt="" onerror="this.remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Pasang aplikasi di HP</span></button>
   </div>
@@ -756,12 +751,12 @@ $("formAuth").addEventListener("submit", async ev => {
       return;
     }
     if (modeDaftar) {
-      const { data, error } = await sb.auth.signUp({ email, password: sandi, options: { data: { nama, minta: $("fMinta").value } } });
+      const { data, error } = await sb.auth.signUp({ email, password: sandi, options: { data: { nama } } });
       if (error) throw error;
       // Supabase menyamarkan email yang sudah terdaftar (tanpa error) kalau Confirm email masih menyala
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) throw new Error("User already registered");
       if (!data.session) { galat.textContent = "Akun dibuat, tapi Confirm email di Supabase masih menyala. Matikan dulu, lalu pilih Masuk."; return; }
-      await setelahMasuk(data.session.user, nama, $("fMinta").value);
+      await setelahMasuk(data.session.user, nama);
     } else {
       const { data, error } = await sb.auth.signInWithPassword({ email, password: sandi });
       if (error) throw error;
@@ -806,7 +801,7 @@ async function setelahMasuk(user, nama, minta){
     $("judulTunggu").textContent = profil.dihapus ? "Akun ini sudah dihapus" : "Menunggu persetujuan pemilik";
     $("teksTunggu").textContent = profil.dihapus
       ? "Akun ini sudah tidak bisa memakai kasir. Hubungi pemilik toko kalau ini keliru."
-      : "Akun sudah terdaftar sebagai calon " + (profil.minta === "admin" ? "admin" : "karyawan") + ". Minta pemilik toko menyetujuinya di menu Akun, lalu tekan tombol di bawah. Nomor ID diberikan saat disetujui.";
+      : "Akun sudah terdaftar. Pemilik toko yang menentukan Anda sebagai karyawan atau admin dan menyetujuinya di menu Akun. Setelah itu tekan tombol di bawah. Nomor ID diberikan saat disetujui.";
     tampilLayar("layarTunggu"); return;
   }
   await bukaAplikasi();
@@ -1926,9 +1921,13 @@ async function muatKaryawan(){
     (penuh ? "" : `<button class="btn kecil${utama === "admin" ? " utama" : ""}" data-aksi="setuju" data-peran="admin" data-id="${esc(p.id)}">Jadikan admin</button>`);
   let html = "";
   if (tunggu.length) html += `<div class="sub-judul">Menunggu persetujuan</div>` + tunggu.map(p =>
-    `<div class="brs tumpuk"><div class="kiri"><b>${esc(p.nama)}</b><small>${esc(p.email)} · minta jadi ${p.minta === "admin" ? "admin" : "karyawan"}</small></div><div class="aksi-akun">${tombolSetuju(p, p.minta === "admin" && !penuh ? "admin" : "karyawan")}<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc(p.nama)}">Tolak</button></div></div>`).join("");
+    `<div class="brs tumpuk"><div class="kiri"><b>${esc(p.nama)}</b><small>${esc(p.email)}</small></div><div class="aksi-akun">${tombolSetuju(p, "karyawan")}<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc(p.nama)}">Tolak</button></div></div>`).join("");
   html += `<div class="sub-judul">Akun aktif</div>` + aktif.map(p =>
-    `<div class="brs"><span class="kode">${esc(p.kode || "-")}</span><div class="kiri"><b>${esc(p.nama)}${p.id === profil.id ? " (Anda)" : ""}</b><small>${esc(p.email)} · ${esc(NAMA_PERAN[p.peran] || p.peran)}</small></div>${p.peran === "pemilik" ? "" : `<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc((p.kode || "") + " " + p.nama)}">Hapus akun</button>`}</div>`).join("");
+    `<div class="brs tumpuk"><div class="kiri" style="display:flex;align-items:center;gap:10px"><span class="kode">${esc(p.kode || "-")}</span><span style="min-width:0"><b>${esc(p.nama)}${p.id === profil.id ? " (Anda)" : ""}</b><small>${esc(p.email)} · ${esc(NAMA_PERAN[p.peran] || p.peran)}</small></span></div>${p.peran === "pemilik" ? "" : `<div class="aksi-akun">${
+      /* pemilik bisa memindahkan peran akun yang sudah aktif: karyawan <-> admin (nomor ID ikut berganti) */
+      p.peran === "karyawan" ? (penuh ? "" : `<button class="btn kecil" data-aksi="setuju" data-ganti="1" data-peran="admin" data-id="${esc(p.id)}" data-nama="${esc((p.kode || "") + " " + p.nama)}">Jadikan admin</button>`)
+                             : `<button class="btn kecil" data-aksi="setuju" data-ganti="1" data-peran="karyawan" data-id="${esc(p.id)}" data-nama="${esc((p.kode || "") + " " + p.nama)}">Jadikan karyawan</button>`
+    }<button class="btn kecil bahaya" data-aksi="hapus" data-id="${esc(p.id)}" data-nama="${esc((p.kode || "") + " " + p.nama)}">Hapus akun</button></div>`}</div>`).join("");
   if (hapus.length) html += `<div class="sub-judul">Akun dihapus</div>` + hapus.map(p =>
     `<div class="brs tumpuk"><div class="kiri"><b>${esc(p.nama)}</b><small>${esc(p.email)}${p.kode_lama ? " · dulu " + esc(p.kode_lama) : ""}</small></div><div class="aksi-akun">${tombolSetuju(p, "")}</div></div>`).join("");
   el.innerHTML = html;
@@ -1939,10 +1938,12 @@ $("daftarKaryawan").addEventListener("click", async e => {
   const b = e.target.closest("button[data-aksi]"); if (!b) return;
   const hapus = b.dataset.aksi === "hapus";
   if (hapus && !confirm(`Hapus akun ${b.dataset.nama.trim()}?\n\nDia tidak bisa memakai kasir lagi dan nomor ID-nya dilepas untuk orang baru. Riwayat penjualannya tetap tersimpan.`)) return;
+  const ganti = b.dataset.ganti === "1";
+  if (ganti && !confirm(`Jadikan ${b.dataset.nama.trim()} sebagai ${b.dataset.peran === "admin" ? "ADMIN" : "KARYAWAN"}?\n\nNomor ID-nya berganti mengikuti peran baru. Hak aksesnya berubah saat dia membuka kasir lagi. Riwayat penjualannya tetap tersimpan dengan ID lama.`)) return;
   b.disabled = true;
   const { data, error } = hapus ? await sb.rpc("hapus_akun", { p_id: b.dataset.id }) : await sb.rpc("setujui_akun", { p_id: b.dataset.id, p_peran: b.dataset.peran });
   if (error) { roti(pesan(error), true); b.disabled = false; return; }
-  roti(hapus ? "Akun dihapus, ID dilepas." : `Akun aktif dengan ID ${data.kode}.`); muatKaryawan();
+  roti(hapus ? "Akun dihapus, ID dilepas." : ganti ? `Peran diganti. ID sekarang ${data.kode}.` : `Akun aktif dengan ID ${data.kode}.`); muatKaryawan();
 });
 
 /* =========================================================
