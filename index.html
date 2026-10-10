@@ -1541,6 +1541,27 @@ async function sambungPrinter(){
   printerBt = null;
   throw new Error("Perangkat itu tidak dikenali sebagai printer struk. Pastikan yang dipilih printernya, dan printernya mendukung Bluetooth LE.");
 }
+/* Ubah galat Bluetooth dari browser menjadi petunjuk yang bisa ditindaklanjuti. Pesan asli browser ikut
+   ditampilkan di belakang, supaya penyebab sebenarnya bisa dilaporkan apa adanya. */
+async function pesanBluetooth(e){
+  const m = (e && e.message) || "", nama = (e && e.name) || "", asli = m ? " (Pesan browser: " + m + ")" : "";
+  if (/Perangkat itu tidak dikenali/.test(m)) return m;
+  if (nama === "NotFoundError" && /cancel/i.test(m))
+    return "Belum ada printer yang dipilih. Kalau printernya tidak muncul di daftar, kemungkinan printernya memakai Bluetooth jenis lama (Classic) yang tidak bisa disambung dari browser: pakai tombol \"Printer biasa / simpan PDF\".";
+  if (/globally disabled|not supported|not implemented/i.test(m))
+    return "Browser ini tidak mengizinkan sambungan Bluetooth dari halaman web. Buka kasir dengan Google Chrome atau Microsoft Edge." + asli;
+  if (/permission|denied|not allowed|NotAllowed/i.test(m + nama))
+    return "Browser belum diberi izin memakai Bluetooth. Izinkan Bluetooth (di Android: izin \"Perangkat di sekitar\" dan Lokasi untuk Chrome), lalu coba lagi." + asli;
+  let tersedia = null;
+  try { if (navigator.bluetooth.getAvailability) tersedia = await navigator.bluetooth.getAvailability(); } catch (x) {}
+  if (tersedia === false || /adapter|not available|turned off|powered/i.test(m))
+    return "Browser tidak menemukan Bluetooth yang bisa dipakai di perangkat ini. Pastikan Bluetooth menyala dan browser boleh memakainya. Di laptop, Bluetooth-nya harus mendukung Bluetooth LE. Kalau tetap tidak bisa, pakai tombol \"Printer biasa / simpan PDF\"." + asli;
+  if (nama === "NetworkError" || /GATT|disconnected|connect|out of range|no longer in range/i.test(m)) {
+    printerBt = null;
+    return "Tidak bisa tersambung ke printer. Pastikan printer menyala dan dekat, lalu coba lagi." + asli;
+  }
+  return (m || "Gagal mencetak.") + (nama && m ? " [" + nama + "]" : "");
+}
 async function kirimKePrinter(data){
   const ch = await sambungPrinter(), tanpaBalas = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
   for (let i = 0; i < data.length; i += 100) {
@@ -1555,7 +1576,7 @@ $("cetakStruk").onclick = () => {
   const adaBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
   $("cetakBt").disabled = !adaBt;
   $("statusCetak").textContent = adaBt ? (printerBt ? "Printer tersambung: " + (printerBt.device.name || "tanpa nama") + "." : "")
-    : "HP atau browser ini tidak bisa menyambung langsung ke printer Bluetooth (iPhone memang tidak mengizinkan). Pakai Chrome di HP Android, atau kirim foto struknya.";
+    : "Perangkat atau browser ini tidak bisa menyambung langsung ke printer Bluetooth (iPhone dan iPad memang tidak mengizinkan). Pakai Chrome di Android, atau Chrome/Edge di laptop, atau kirim foto struknya.";
   $("lupaPrinter").hidden = !printerBt;
   const d = $("dlgCetak"); if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 };
@@ -1570,11 +1591,7 @@ $("cetakBt").onclick = async () => {
     status.textContent = "Struk dikirim ke " + ((printerBt && printerBt.device.name) || "printer") + ".";
     $("lupaPrinter").hidden = false;
   } catch (e) {
-    const m = (e && e.message) || "";
-    if (e && e.name === "NotFoundError" && /cancel/i.test(m)) status.textContent = "Belum ada printer yang dipilih.";
-    else if (/adapter|not available|turned off|disabled/i.test(m)) status.textContent = "Bluetooth HP belum menyala. Nyalakan dulu, lalu coba lagi.";
-    else if (e && (e.name === "NetworkError" || /GATT|disconnected|connect/i.test(m))) { printerBt = null; status.textContent = "Tidak bisa tersambung ke printer. Pastikan printer menyala dan dekat, lalu coba lagi."; }
-    else status.textContent = m || "Gagal mencetak.";
+    status.textContent = await pesanBluetooth(e);
   } finally { tombol.disabled = false; }
 };
 $("cetakBiasa").onclick = async () => {
