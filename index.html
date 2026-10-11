@@ -204,7 +204,11 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .brs .kanan{font-weight:800;text-align:end;white-space:nowrap;flex:none}
 .panel{min-width:0;max-width:100%}
 /* nama barang di rekap dan di kotak barang lain ditampilkan utuh (turun baris), supaya ukurannya tetap terbaca */
-#terlaris .kiri b,#lainLaporan .kiri b,#semuaLain .kiri b{white-space:normal;overflow-wrap:anywhere}
+#terlaris .kiri b,#lainBarang .kiri b{white-space:normal;overflow-wrap:anywhere}
+/* daftar transaksi dikelompokkan per kasir: baris judul tiap kasir */
+.brs.kepala-kasir{background:var(--lunak);border-top:2px solid var(--garis)}
+.brs.kepala-kasir .kiri b{color:var(--daun);white-space:normal}
+.brs.kepala-kasir .kode{flex:none}
 .isi{overflow-x:clip}
 button.brs{width:100%;text-align:start}
 .brs.batal .kanan,.brs.batal .kiri b{text-decoration:line-through;color:var(--redup)}
@@ -455,7 +459,6 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="panel" id="terlaris"></div>
         <div class="panel" id="daftarTrx"></div>
       </div>
-      <div class="panel" id="lainLaporan" style="margin-top:14px" data-pemilik hidden></div>
     </section>
 
     <!-- ----- BARANG (admin) ----- -->
@@ -495,7 +498,14 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="aksi"><button class="btn kecil utama" id="simpanRekening">Simpan rekening</button></div>
         <p class="info" id="statusRekening" style="margin-top:8px" role="status"></p>
       </div>
-      <div class="panel" id="semuaLain" style="margin-top:16px" data-pemilik hidden></div>
+      <div class="panel" id="panelLain" style="margin-top:16px" data-pemilik hidden>
+        <h2>Barang lain di tanggal ini <span class="cap emas">hanya pemilik</span></h2>
+        <div style="padding:0 16px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <input class="isian" type="date" id="tglLain" aria-label="Tanggal barang lain" style="max-width:190px">
+          <span class="info">Barang yang diketik manual (tidak ada di katalog).</span>
+        </div>
+        <div id="lainBarang"></div>
+      </div>
     </section>
 
     <!-- ----- KARYAWAN (admin) ----- -->
@@ -871,7 +881,7 @@ async function bukaAplikasi(){
      yang terakhir dibuka pengguna sebelumnya), dan buang sisa laporan milik pengguna sebelumnya */
   tampilHal("kasir"); perbaruiBar();
   $("cariKasir").value = $("cariBarang").value = ""; st.kataKasir = st.kataBarang = ""; st.katKasir = st.katBarang = -1; st.tampilKasir = st.tampilBarang = PER_HALAMAN;
-  $("ringkasLaporan").innerHTML = $("terlaris").innerHTML = $("daftarTrx").innerHTML = $("daftarKaryawan").innerHTML = $("lainLaporan").innerHTML = $("semuaLain").innerHTML = ""; $("waktuLaporan").textContent = "";
+  $("ringkasLaporan").innerHTML = $("terlaris").innerHTML = $("daftarTrx").innerHTML = $("daftarKaryawan").innerHTML = $("lainBarang").innerHTML = ""; $("waktuLaporan").textContent = "";
   $("daftarKasir").innerHTML = ""; tampilKosongKasir("Memuat barang…", "");
   try {
     if (!ITEM.length) await muatKatalog();
@@ -961,7 +971,7 @@ function bukaHal(h){
   perbaruiBar();
   if (h === "kasir") gambarKasir();
   if (h === "laporan") muatLaporan();
-  if (h === "barang") { gambarBarang(); if (adalahPemilik()) muatSemuaLain(); }
+  if (h === "barang") { gambarBarang(); if (adalahPemilik()) muatLainBarang(); }
   if (h === "karyawan") muatKaryawan();
   window.scrollTo(0, 0);
 }
@@ -1652,7 +1662,7 @@ async function muatLaporan(diam){
   /* data di layar milik tanggal lain (baru ganti tanggal, atau baru ganti hari): kosongkan dulu, supaya
      unduhan tidak sempat memakai isi tanggal lama dengan judul tanggal baru */
   if (st.tglTrx !== tgl) { st.trx = []; st.tglTrx = null; }
-  if (!diam || !st.tglTrx) { $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("lainLaporan").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`; }
+  if (!diam || !st.tglTrx) { $("ringkasLaporan").innerHTML = ""; $("terlaris").innerHTML = ""; $("daftarTrx").innerHTML = `<div class="kosong">Memuat…</div>`; }
   const { data, error } = await sb.from("transaksi").select("*").gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString()).order("waktu", { ascending: false }).limit(1000);
   if (urut !== st.urutLaporan) return;                         // sudah ada permintaan yang lebih baru
   if (error) { if (!diam || !st.tglTrx) $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
@@ -1704,39 +1714,39 @@ function rekapBarang(sah){
   hasil.forEach(x => { x.tipe = x.adaPartai && x.adaEcer ? "campur" : x.adaPartai ? "partai" : "ecer"; });
   return hasil;
 }
-/* ---------- kotak "Barang lain", hanya tampil untuk pemilik ----------
-   Barang yang diketik manual oleh kasir (tidak ada di katalog), supaya pemilik tahu apa saja yang
-   ditambahkan dan bisa memutuskan mana yang perlu dimasukkan ke katalog. */
-function gambarLainLaporan(sah){
-  const el = $("lainLaporan"); if (!adalahPemilik()) { el.innerHTML = ""; return; }
+/* ---------- kotak "Barang lain di tanggal ini" (menu Barang, hanya pemilik) ----------
+   Barang yang diketik manual oleh admin/pemilik (tidak ada di katalog) pada satu tanggal, supaya pemilik tahu
+   apa saja yang ditambahkan dan bisa memutuskan mana yang perlu dimasukkan ke katalog. Tanggal bawaannya
+   hari ini dan bisa diganti. Transaksi yang dibatalkan tidak ikut. */
+async function muatLainBarang(){
+  const el = $("lainBarang"); if (!adalahPemilik()) { el.innerHTML = ""; return; }
+  const inp = $("tglLain"), hariIni = tglLokal(new Date());
+  if (!inp.value || st.hariLain !== hariIni) { inp.value = hariIni; st.hariLain = hariIni; }      // ganti hari: kembali ke hari ini
+  const tgl = inp.value, urut = st.urutLain = (st.urutLain || 0) + 1;
+  const [y, m, d] = tgl.split("-").map(Number), awal = new Date(y, m - 1, d), akhir = new Date(y, m - 1, d + 1);
+  el.innerHTML = `<div class="kosong">Memuat…</div>`;
+  const { data, error } = await sb.from("transaksi").select("item,kasir_kode,kasir_nama,waktu,batal")
+    .gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString()).order("waktu", { ascending: true }).limit(1000);
+  if (urut !== st.urutLain) return;                       // tanggal sudah diganti lagi: hasil ini sudah basi
+  if (error) { el.innerHTML = `<div class="kosong">${esc(pesan(error))}</div>`; return; }
   const peta = new Map();
-  for (const t of sah.slice().reverse())
+  for (const t of (data || [])) {
+    if (t.batal) continue;
     for (const i of (t.item || [])) {
       if (!String(i.kunci || "").startsWith("lain|")) continue;
-      const k = i.kunci + "|" + i.harga, x = peta.get(k) || { nama: i.nama, harga: Number(i.harga), qty: 0, uang: 0, oleh: (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama, jam: jamTeks(t.waktu), kasir: new Set() };
-      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); x.kasir.add((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama); peta.set(k, x);
+      const oleh = (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama;
+      const k = i.kunci + "|" + i.harga, x = peta.get(k) || { nama: i.nama, harga: Number(i.harga), qty: 0, uang: 0, oleh, jam: jamTeks(t.waktu), kasir: new Set() };
+      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); x.kasir.add(oleh); peta.set(k, x);
     }
+  }
   const daftar = [...peta.values()];
-  el.innerHTML = `<h2>Barang lain di tanggal ini <span class="cap emas">hanya pemilik</span></h2>` + (daftar.length ? daftar.map(x =>
-    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)} · pertama diketik ${esc(x.oleh)}, ${esc(x.jam)}${x.kasir.size > 1 ? " · dipakai " + x.kasir.size + " kasir" : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
-    : `<div class="kosong">Tidak ada barang yang diketik manual di tanggal ini.</div>`);
+  el.innerHTML = daftar.length ? daftar.map(x =>
+    `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)} · pertama dicatat ${esc(x.oleh)}, ${esc(x.jam)}${x.kasir.size > 1 ? " · dijual " + x.kasir.size + " kasir" : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
+    : `<div class="kosong">Tidak ada barang yang diketik manual di tanggal ini.</div>`;
 }
-/* semua barang lain yang pernah diketik, dari yang paling baru dijual */
-async function muatSemuaLain(){
-  const el = $("semuaLain"); if (!adalahPemilik()) { el.innerHTML = ""; return; }
-  el.innerHTML = `<h2>Semua barang lain yang pernah diketik <span class="cap emas">hanya pemilik</span></h2><div class="kosong">Memuat…</div>`;
-  const { data, error } = await sb.from("barang").select("kunci,nama,harga,diubah").like("kunci", "lain|%").order("diubah", { ascending: false }).limit(500);
-  const kepala = `<h2>Semua barang lain yang pernah diketik <span class="cap emas">hanya pemilik</span></h2>`;
-  if (error) { el.innerHTML = kepala + `<div class="kosong">${esc(pesan(error))}</div>`; return; }
-  const hariIni = tglLokal(new Date());
-  el.innerHTML = kepala + `<p class="info" style="padding:0 16px 10px">Barang yang sering muncul di sini layak dimasukkan ke katalog. Daftar ini tidak memengaruhi kasir: barang lain tetap hanya berlaku pada hari dijual.</p>` +
-    ((data || []).length ? data.map(b => { const tgl = b.diubah ? new Date(b.diubah) : null, hari = tgl ? tglLokal(tgl) : "";
-      return `<div class="brs"><div class="kiri"><b>${esc(b.nama)}</b><small class="angka">terakhir dijual ${tgl ? esc(tgl.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })) : "-"}${hari === hariIni ? ` <span class="cap">hari ini</span>` : ""}</small></div><div class="kanan angka">${Number(b.harga) > 0 ? rp(b.harga) : "-"}</div></div>`; }).join("")
-    : `<div class="kosong">Belum pernah ada barang yang diketik manual.</div>`);
-}
+$("tglLain").onchange = () => { st.hariLain = tglLokal(new Date()); muatLainBarang(); };
 function gambarLaporan(){
   const sah = st.trx.filter(t => !t.batal);
-  gambarLainLaporan(sah);
   let omzet = 0, tunai = 0;
   for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); }
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
@@ -1746,9 +1756,26 @@ function gambarLaporan(){
     `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
   const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
-  $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + (st.trx.length ? st.trx.map(t =>
-    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? " · " + esc(t.pembeli) : ""} · ${esc(ketMetode(t))}${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`).join("")
-    : `<div class="kosong">Belum ada transaksi di tanggal ini.</div>`);
+  const tanda = t => `${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}`;
+  const barisTrx = (t, denganKasir) =>
+    `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${denganKasir ? esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama) + " · " : ""}${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(ketMetode(t))}${tanda(t)}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
+  let isiTrx;
+  if (!st.trx.length) isiTrx = `<div class="kosong">Belum ada transaksi di tanggal ini.</div>`;
+  else if (!adalahAdmin()) isiTrx = st.trx.map(t => barisTrx(t, true)).join("");            // karyawan: hanya miliknya, tidak perlu dikelompokkan
+  else {
+    /* Admin dan pemilik: dikelompokkan per kasir (urut nomor ID), supaya terlihat apa saja yang dilayani tiap
+       orang hari itu. Kasir dikenali dari akunnya, jadi yang ID-nya berganti di tengah hari tetap satu kelompok. */
+    const kel = new Map();
+    for (const t of st.trx) {
+      const k = t.kasir_id || (t.kasir_kode + "|" + t.kasir_nama);
+      let g = kel.get(k); if (!g) kel.set(k, g = { kode: t.kasir_kode || "", nama: t.kasir_nama || "", trx: [], uang: 0, sah: 0, batal: 0 });
+      g.trx.push(t); if (t.batal) g.batal++; else { g.sah++; g.uang += Number(t.total); }
+    }
+    isiTrx = [...kel.values()].sort((a, b) => a.kode.localeCompare(b.kode, "id", { numeric: true }) || a.nama.localeCompare(b.nama)).map(g =>
+      `<div class="brs kepala-kasir"><span class="kode">${esc(g.kode || "-")}</span><div class="kiri"><b>${esc(g.nama)}</b><small class="angka">${g.sah} transaksi${g.batal ? " · " + g.batal + " dibatalkan" : ""}</small></div><div class="kanan angka">${rp(g.uang)}</div></div>` +
+      g.trx.map(t => barisTrx(t, false)).join("")).join("");
+  }
+  $("daftarTrx").innerHTML = `<h2>Daftar transaksi</h2>` + isiTrx;
 }
 
 /* Excel dengan susunan yang sama seperti rekap harian admin:
