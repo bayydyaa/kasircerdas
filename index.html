@@ -434,6 +434,11 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
               <label class="lbl" for="rekening">Transfer ke rekening</label>
               <select class="isian" id="rekening"></select>
             </div>
+            <div id="areaBiaya" hidden>
+              <label class="lbl" for="biayaAdmin">Biaya admin transfer (kalau ada)</label>
+              <input class="isian angka" id="biayaAdmin" inputmode="numeric" autocomplete="off" placeholder="0">
+              <p class="info angka" id="ketBiaya" style="margin-top:6px" hidden></p>
+            </div>
             <label class="lbl" for="pembeli">Nama pembeli (opsional)</label>
             <input class="isian" id="pembeli" maxlength="60" autocomplete="off">
             <p class="galat" id="galatBayar" role="alert"></p>
@@ -1165,7 +1170,7 @@ function simpanDraf(){
   try {
     if (!keranjang.size && !st.ubah) { localStorage.removeItem(KUNCI_DRAF); return; }
     localStorage.setItem(KUNCI_DRAF, JSON.stringify({ uid: profil.id, waktu: Date.now(), baris: [...keranjang], metode: metode(),
-      rekening: $("rekening").value || "", pembeli: $("pembeli").value || "", ubah: st.ubah || null, benih: st.benihKirim || null }));
+      rekening: $("rekening").value || "", pembeli: $("pembeli").value || "", biaya: angkaDari($("biayaAdmin").value), ubah: st.ubah || null, benih: st.benihKirim || null }));
   } catch (e) {}
 }
 function buangDraf(){ try { localStorage.removeItem(KUNCI_DRAF); } catch (e) {} }
@@ -1182,6 +1187,7 @@ function pulihkanDraf(){
   const r = document.querySelector(`input[name="metode"][value="${d.metode === "transfer" ? "transfer" : "tunai"}"]`); if (r) r.checked = true;
   if (d.rekening && REKENING.includes(d.rekening)) $("rekening").value = d.rekening;
   $("pembeli").value = String(d.pembeli || "").slice(0, 60);
+  $("biayaAdmin").value = Number(d.biaya) > 0 && Number(d.biaya) <= 50000 ? ribuan(Math.round(Number(d.biaya))) : "";
   st.ubah = d.ubah && d.ubah.id != null ? { id: d.ubah.id, nomor: String(d.ubah.nomor || "") } : null;
   st.benihKirim = typeof d.benih === "string" ? d.benih : null;
   return keranjang.size > 0 || !!st.ubah;
@@ -1290,10 +1296,16 @@ $("barKr").onclick = () => document.body.classList.add("kr-buka");
 $("tutupKr").onclick = $("tirai").onclick = () => document.body.classList.remove("kr-buka");
 
 const metode = () => (document.querySelector('input[name="metode"]:checked') || {}).value || "tunai";
+/* Biaya admin bank yang ikut dibayar pembeli saat transfer. Bukan penjualan: tidak masuk omzet maupun
+   rekap barang, tetapi ikut dihitung di jumlah transfer supaya cocok dengan mutasi rekening. */
+const biayaAdmin = () => metode() === "transfer" ? angkaDari($("biayaAdmin").value) : 0;
 function hitungBayar(){
   const total = totalKeranjang();
   $("totalKr").textContent = rp(total);
   $("areaRekening").hidden = !(metode() === "transfer" && REKENING.length);
+  $("areaBiaya").hidden = metode() !== "transfer";
+  const biaya = biayaAdmin(), ket = $("ketBiaya");
+  ket.hidden = !(biaya > 0); if (biaya > 0) ket.textContent = `Yang ditransfer pembeli: ${rp(total)} + biaya admin ${rp(biaya)} = ${rp(total + biaya)}`;
   const lengkap = hargaLengkap();
   const PETUNJUK = "Isi harga satuan semua barang dulu.", galat = $("galatBayar");
   if (keranjang.size && !lengkap) galat.textContent = PETUNJUK; else if (galat.textContent === PETUNJUK) galat.textContent = "";
@@ -1301,11 +1313,16 @@ function hitungBayar(){
   simpanDraf();
 }
 $("pembeli").addEventListener("input", simpanDraf);
+$("biayaAdmin").addEventListener("input", e => {
+  const n = angkaDari(e.target.value); e.target.value = n ? ribuan(n) : "";
+  hitungBayar();
+});
 $("rekening").addEventListener("change", simpanDraf);
 document.querySelectorAll('input[name="metode"]').forEach(r => r.addEventListener("change", hitungBayar));
 
 $("simpanTrx").onclick = async () => {
   const tombol = $("simpanTrx"), galat = $("galatBayar"); galat.textContent = "";
+  if (biayaAdmin() > 50000) { galat.textContent = "Biaya admin paling besar Rp50.000. Periksa lagi angkanya."; return; }
   /* jaring pengaman salah ketik: harga yang jauh dari harga terakhir harus dikonfirmasi */
   const baris = [...keranjang.values()], namaBrs = b => b.nama + (b.ukuran ? " " + b.ukuran : "");
   const aneh = baris.filter(b => { const acuan = hargaDari(b.kunci); return acuan > 0 && (b.harga > acuan * 2 || b.harga < acuan / 2); });
@@ -1316,14 +1333,14 @@ $("simpanTrx").onclick = async () => {
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
     const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
-    const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "" };
+    const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "", p_biaya_admin: biayaAdmin() };
     const ubah = st.ubah;
     const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umum }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang(), p_kunci: kunciKirim(umum) });
     if (error) throw error;
     st.benihKirim = null;
     if (ubah) { const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data; }
     st.ubah = null; aturPitaUbah();
-    keranjang.clear(); $("pembeli").value = "";
+    keranjang.clear(); $("pembeli").value = ""; $("biayaAdmin").value = "";
     document.querySelector('input[name="metode"][value="tunai"]').checked = true;
     try { await muatBarang(); } catch (e) {}
     gambarKeranjang(); gambarKasir();
@@ -1356,13 +1373,14 @@ function mulaiUbah(t){
   document.querySelector(`input[name="metode"][value="${m}"]`).checked = true;
   if (t.rekening && REKENING.includes(t.rekening)) $("rekening").value = t.rekening;
   $("pembeli").value = t.pembeli || "";
+  $("biayaAdmin").value = Number(t.biaya_admin) > 0 ? ribuan(Number(t.biaya_admin)) : "";
   st.ubah = { id: t.id, nomor: t.nomor || "#" + t.id };
   $("dlgStruk").close(); bukaHal("kasir"); aturPitaUbah(); gambarKeranjang();
   if (window.matchMedia("(max-width:899px)").matches) document.body.classList.add("kr-buka");
 }
 $("batalUbahBawah").onclick = () => $("batalUbah").click();
 $("batalUbah").onclick = () => {
-  st.ubah = null; keranjang.clear(); $("pembeli").value = "";
+  st.ubah = null; keranjang.clear(); $("pembeli").value = ""; $("biayaAdmin").value = "";
   document.querySelector('input[name="metode"][value="tunai"]').checked = true;
   aturPitaUbah(); gambarKeranjang(); gambarKasir(); roti("Batal mengubah. Transaksi tidak berubah.");
 };
@@ -1384,7 +1402,7 @@ function htmlStruk(t){
     ${t.batal ? `<div class="tengah"><span class="batal-cap">DIBATALKAN</span></div>` : ""}
     <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
     <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}${i.tipe === "partai" ? " (partai)" : ""}</div>${brs("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)))}`).join("")}
-    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${Number(t.kembali) > 0 ? brs("Kembali", rp(t.kembali)) : ""}
+    <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${Number(t.biaya_admin) > 0 ? brs("Biaya admin transfer", rp(t.biaya_admin)) : ""}${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${Number(t.kembali) > 0 ? brs("Kembali", rp(t.kembali)) : ""}
     ${t.diubah_oleh ? `<div class="tengah" style="font-size:.9em">Diubah oleh ${esc(t.diubah_oleh)}, ${esc(waktuTeks(t.diubah_waktu))}</div>` : ""}
     <hr><div class="tengah">Terima kasih sudah berbelanja</div></div>`;
 }
@@ -1426,6 +1444,7 @@ async function fotoStruk(t, pakaiLogo = true){
     dua("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)));
   }
   garis(); dua("TOTAL", rp(t.total), true);
+  if (Number(t.biaya_admin) > 0) dua("Biaya admin transfer", rp(t.biaya_admin));
   dua((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar));
   if (Number(t.kembali) > 0) dua("Kembali", rp(t.kembali));
   if (t.diubah_oleh) tengah("Diubah oleh " + t.diubah_oleh);
@@ -1518,6 +1537,7 @@ function barisStruk(t, kol){
     dua("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)));
   }
   garis(); dua("TOTAL", rp(t.total), true);
+  if (Number(t.biaya_admin) > 0) dua("Biaya admin transfer", rp(t.biaya_admin));
   dua((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar));
   if (Number(t.kembali) > 0) dua("Kembali", rp(t.kembali));
   if (t.diubah_oleh) tengah("Diubah oleh " + t.diubah_oleh);
@@ -1747,15 +1767,15 @@ async function muatLainBarang(){
 $("tglLain").onchange = () => { st.hariLain = tglLokal(new Date()); muatLainBarang(); };
 function gambarLaporan(){
   const sah = st.trx.filter(t => !t.batal);
-  let omzet = 0, tunai = 0;
-  for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); }
+  let omzet = 0, tunai = 0, biaya = 0;
+  for (const t of sah) { omzet += Number(t.total); if (t.metode === "tunai") tunai += Number(t.total); else biaya += Number(t.biaya_admin) || 0; }
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
   const rekap = rekapBarang(sah), partai = rekap.reduce((a, x) => a + x.uangPartai, 0);
-  $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(sah.length)) + kotak("Total cash", rp(tunai)) + kotak("Total transfer", rp(omzet - tunai)) + kotak("Ecer", rp(omzet - partai)) + kotak("Partai", rp(partai));
+  $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(sah.length)) + kotak("Total cash", rp(tunai)) + kotak("Total transfer", rp(omzet - tunai + biaya) + (biaya > 0 ? `<small style="display:block;font-weight:600">termasuk biaya admin ${rp(biaya)}</small>` : "")) + kotak("Ecer", rp(omzet - partai)) + kotak("Partai", rp(partai));
   $("terlaris").innerHTML = `<h2>Barang terjual</h2>` + (rekap.length ? rekap.map(x =>
     `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
-  const ketMetode = t => t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode);
+  const ketMetode = t => (t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode)) + (Number(t.biaya_admin) > 0 ? " · admin " + ribuan(Number(t.biaya_admin)) : "");
   const tanda = t => `${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}`;
   const barisTrx = (t, denganKasir) =>
     `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${denganKasir ? esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama) + " · " : ""}${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(ketMetode(t))}${tanda(t)}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
@@ -1793,15 +1813,18 @@ function susunLaporan(){
   rekap.forEach((x, i) => sel.push([K(i + 1, 4), K(x.nama, 3), K(x.qty, 4), K(x.harga, 5), K(x.uang, 5), K(x.tipe === "partai" ? "PARTAI" : x.tipe === "campur" ? "ECER+PARTAI" : "ECER", 8)]));
   const total = rekap.reduce((a, x) => a + x.uang, 0);
   gabung.push(`A${brs()}:D${brs()}`); sel.push([K("", 9), K("", 9), K("", 9), K("", 9), K(total, 7), K("", 9)]);
-  let tf = 0; const awalTf = brs();
+  /* Daftar transfer memakai jumlah yang benar-benar ditransfer (harga barang + biaya admin) supaya cocok
+     dengan mutasi rekening. Biaya admin dipisah di baris sendiri, dan TOTAL CASH tetap = penjualan tunai. */
+  let tf = 0, biaya = 0; const awalTf = brs();
   for (const t of sah.slice().reverse()) {
     if (t.metode === "tunai") continue;
-    tf += Number(t.total);
+    const b = Number(t.biaya_admin) || 0;
+    tf += Number(t.total) + b; biaya += b;
     gabung.push(`C${brs()}:D${brs()}`);
-    sel.push([K("", 9), K("", 9), K(t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), 8), K("", 8), K(Number(t.total), 5), K("", 9)]);
+    sel.push([K("", 9), K("", 9), K(t.metode === "qris" ? "QRIS" : (t.rekening || "TRANSFER").toUpperCase(), 8), K("", 8), K(Number(t.total) + b, 5), K(b > 0 ? "+ADMIN " + ribuan(b) : "", 8)]);
   }
   if (brs() - awalTf > 0) gabung.push(`A${awalTf}:B${brs() - 1}`);            // blok kosong di kiri daftar transfer
-  for (const [label, nilai] of [["TOTAL TF", tf], ["TOTAL CASH", total - tf]]) {
+  for (const [label, nilai] of [["TOTAL TF", tf], ...(biaya > 0 ? [["BIAYA ADMIN TF", biaya]] : []), ["TOTAL CASH", total - (tf - biaya)]]) {
     gabung.push(`A${brs()}:D${brs()}`); sel.push([K(label, 6), K("", 6), K("", 6), K("", 6), K(nilai, 7), K("", 9)]);
   }
   return { sel, gabung, baris: sel.map(r => r.map(c => c.v)) };
@@ -1870,11 +1893,12 @@ function susunPenjualan(){
   sel.push([K(`PENJUALAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:K1");
   sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:K2");
   sel.push(["NO", "TANGGAL", "NO. TRANSAKSI", "NAMA CUSTOMER", "JENIS BARANG", "QTY", "HARGA", "JUMLAH", "TOTAL", "BAYAR", "DICATAT OLEH"].map(t => K(t, 2)));
-  let total = 0, tf = 0;
+  let total = 0, tf = 0, biaya = 0;
   sah.forEach((t, n) => {
     const item = t.item && t.item.length ? t.item : [{ nama: "-", qty: 0, harga: 0, jumlah: 0 }], awal = brs();
-    const bayar = t.metode === "tunai" ? "TUNAI" : t.metode === "qris" ? "QRIS" : "TF " + (t.rekening || "").toUpperCase();
-    total += Number(t.total); if (t.metode !== "tunai") tf += Number(t.total);
+    const b = t.metode === "tunai" ? 0 : (Number(t.biaya_admin) || 0);
+    const bayar = (t.metode === "tunai" ? "TUNAI" : t.metode === "qris" ? "QRIS" : "TF " + (t.rekening || "").toUpperCase()) + (b > 0 ? " +ADMIN " + ribuan(b) : "");
+    total += Number(t.total); if (t.metode !== "tunai") { tf += Number(t.total) + b; biaya += b; }
     item.forEach((i, k) => {
       const pertama = k === 0;
       sel.push([
@@ -1885,7 +1909,7 @@ function susunPenjualan(){
     });
     if (item.length > 1) for (const kol of ["A", "B", "C", "D", "I", "J", "K"]) gabung.push(`${kol}${awal}:${kol}${brs() - 1}`);
   });
-  for (const [label, nilai] of [["TOTAL", total], ["TOTAL TF", tf], ["TOTAL CASH", total - tf]]) {
+  for (const [label, nilai] of [["TOTAL", total], ["TOTAL TF", tf], ...(biaya > 0 ? [["BIAYA ADMIN TF", biaya]] : []), ["TOTAL CASH", total - (tf - biaya)]]) {
     gabung.push(`A${brs()}:H${brs()}`);
     sel.push([K(label, 6), ...Array.from({ length: 7 }, () => K("", 6)), K(nilai, 7), K("", 9), K("", 9)]);
   }
