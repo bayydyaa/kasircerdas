@@ -256,6 +256,9 @@ select.isian{appearance:auto}
 .tipe button[aria-pressed="true"]{background:var(--kertas);color:var(--daun);box-shadow:0 1px 3px rgba(15,61,36,.18)}
 .tipe button[data-t="partai"][aria-pressed="true"]{background:var(--emas);color:#2b1d00}
 .baris-lain{display:flex;justify-content:center;margin-top:12px}
+.cek-susulan{display:flex;align-items:center;gap:8px;font-size:.88rem;font-weight:600;color:var(--teks);cursor:pointer}
+.cek-susulan input{width:18px;height:18px;accent-color:var(--daun)}
+#ketSusulan{color:#5c4104;background:var(--emas-lunak);border-radius:8px;padding:7px 10px;font-weight:600}
 .kr-item .petunjuk-pecah{grid-column:1/-1;font-size:.82rem;line-height:1.35;color:#5c4104;background:var(--emas-lunak);border-radius:8px;padding:7px 10px}
 
 /* ---------- pasang sebagai aplikasi (PWA) ---------- */
@@ -438,6 +441,14 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
               <label class="lbl" for="biayaAdmin">Biaya admin transfer (kalau ada)</label>
               <input class="isian angka" id="biayaAdmin" inputmode="numeric" autocomplete="off" placeholder="0">
               <p class="info angka" id="ketBiaya" style="margin-top:6px" hidden></p>
+            </div>
+            <div id="areaSusulan" data-pemilik hidden style="margin-top:12px">
+              <label class="cek-susulan"><input type="checkbox" id="pakaiSusulan"> Input susulan (lupa dicatat di hari sebelumnya)</label>
+              <div id="isiSusulan" hidden style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+                <input class="isian" type="date" id="tglSusulan" aria-label="Tanggal penjualan" style="flex:1 1 150px">
+                <input class="isian" type="time" id="jamSusulan" value="12:00" aria-label="Jam penjualan" style="flex:0 1 120px">
+              </div>
+              <p class="info" id="ketSusulan" style="margin-top:6px" hidden></p>
             </div>
             <label class="lbl" for="pembeli">Nama pembeli (opsional)</label>
             <input class="isian" id="pembeli" maxlength="60" autocomplete="off">
@@ -1323,6 +1334,9 @@ document.querySelectorAll('input[name="metode"]').forEach(r => r.addEventListene
 $("simpanTrx").onclick = async () => {
   const tombol = $("simpanTrx"), galat = $("galatBayar"); galat.textContent = "";
   if (biayaAdmin() > 50000) { galat.textContent = "Biaya admin paling besar Rp50.000. Periksa lagi angkanya."; return; }
+  const susulan = susulanAktif() ? waktuSusulan() : null;
+  if (susulan && susulan.galat) { galat.textContent = susulan.galat; return; }
+  if (susulan && !confirm(`Simpan sebagai penjualan tanggal ${tglIndo(susulan.tgl)} jam ${susulan.jam.replace(":", ".")}?\n\nTransaksi ini masuk ke laporan tanggal itu dan bertanda "Susulan".`)) return;
   /* jaring pengaman salah ketik: harga yang jauh dari harga terakhir harus dikonfirmasi */
   const baris = [...keranjang.values()], namaBrs = b => b.nama + (b.ukuran ? " " + b.ukuran : "");
   const aneh = baris.filter(b => { const acuan = hargaDari(b.kunci); return acuan > 0 && (b.harga > acuan * 2 || b.harga < acuan / 2); });
@@ -1333,9 +1347,10 @@ $("simpanTrx").onclick = async () => {
   tombol.disabled = true; tombol.textContent = "Menyimpan…";
   try {
     const item = [...keranjang].map(([, b]) => ({ kunci: b.kunci, nama: b.nama, ukuran: b.ukuran, qty: b.qty, harga: b.harga, tipe: b.tipe }));
-    const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "", p_biaya_admin: biayaAdmin() };
+    const umum = { p_item: item, p_metode: metode(), p_pembeli: $("pembeli").value.trim(), p_rekening: metode() === "transfer" ? ($("rekening").value || "") : "", p_biaya_admin: biayaAdmin(), ...(susulan ? { p_waktu: susulan.iso } : {}) };
     const ubah = st.ubah;
-    const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umum }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang(), p_kunci: kunciKirim(umum) });
+    const { p_waktu, ...umumUbah } = umum;
+    const { data, error } = ubah ? await sb.rpc("ubah_transaksi", { p_id: ubah.id, ...umumUbah }) : await sb.rpc("buat_transaksi", { ...umum, p_bayar: totalKeranjang(), p_kunci: kunciKirim(umum) });
     if (error) throw error;
     st.benihKirim = null;
     if (ubah) { const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data; }
@@ -1344,13 +1359,45 @@ $("simpanTrx").onclick = async () => {
     document.querySelector('input[name="metode"][value="tunai"]').checked = true;
     try { await muatBarang(); } catch (e) {}
     gambarKeranjang(); gambarKasir();
-    bukaStruk(data, !ubah);
+    if (susulan) { $("pakaiSusulan").checked = false; aturSusulan(); }
+    bukaStruk(data, !ubah && !susulan);
     if (ubah) roti("Perubahan disimpan.");
+    else if (susulan) roti(`Tersimpan sebagai susulan tanggal ${tglIndo(susulan.tgl)}.`);
   } catch (e) {
     galat.textContent = pesan(e);
     try { await muatBarang(); gambarKasir(); } catch (x) {}
   } finally { aturPitaUbah(); hitungBayar(); }
 };
+
+/* ---------- input susulan (hanya pemilik) ----------
+   Penjualan hari sebelumnya yang lupa dicatat. Tanggal paling lama 31 hari ke belakang dan tidak boleh hari
+   ini. Server menyimpan tanggal penjualan sebagai "waktu", menandainya "susulan", dan tidak mengubah harga acuan. */
+const tglMundur = n => { const d = new Date(); d.setDate(d.getDate() - n); return tglLokal(d); };
+const tglIndo = t => t.split("-").reverse().join("-");                   // "2026-10-15" -> "15-10-2026"
+function susulanAktif(){ return adalahPemilik() && !st.ubah && $("pakaiSusulan").checked; }
+function waktuSusulan(){
+  const tgl = $("tglSusulan").value, jam = $("jamSusulan").value || "12:00";
+  if (!tgl) return { galat: "Pilih tanggal penjualannya." };
+  if (tgl >= tglLokal(new Date())) return { galat: "Input susulan hanya untuk tanggal sebelum hari ini." };
+  if (tgl < tglMundur(31)) return { galat: "Input susulan paling lama 31 hari ke belakang." };
+  return { tgl, jam, iso: new Date(`${tgl}T${jam}:00+08:00`).toISOString() };   // jam toko (WITA)
+}
+function aturSusulan(){
+  const boleh = adalahPemilik() && !st.ubah;
+  $("areaSusulan").hidden = !boleh;
+  if (!boleh) $("pakaiSusulan").checked = false;
+  const aktif = susulanAktif();
+  $("isiSusulan").hidden = !aktif;
+  const inp = $("tglSusulan"); inp.max = tglMundur(1); inp.min = tglMundur(31);
+  if (aktif && !inp.value) inp.value = tglMundur(1);
+  const ket = $("ketSusulan"), w = aktif ? waktuSusulan() : null;
+  ket.hidden = !aktif;
+  if (aktif) ket.textContent = w.galat || `Dicatat sebagai penjualan ${tglIndo(w.tgl)} jam ${w.jam.replace(":", ".")}, bertanda "Susulan". Harga acuan tidak berubah.`;
+  if (!st.ubah) $("simpanTrx").textContent = aktif ? "Simpan sebagai susulan" : "Simpan transaksi";
+}
+$("pakaiSusulan").addEventListener("change", aturSusulan);
+$("tglSusulan").addEventListener("change", aturSusulan);
+$("jamSusulan").addEventListener("change", aturSusulan);
 
 /* ---------- mode ubah transaksi (pemilik: bebas; admin dan karyawan: milik sendiri, 15 menit) ---------- */
 function aturPitaUbah(){
@@ -1360,6 +1407,7 @@ function aturPitaUbah(){
   $("simpanTrx").textContent = st.ubah ? "Simpan perubahan" : "Simpan transaksi";
   $("kosongkanKr").textContent = st.ubah ? "Batal ubah" : "Kosongkan";
   $("batalUbahBawah").hidden = !st.ubah;
+  aturSusulan();
 }
 function mulaiUbah(t){
   if (!bolehUbah(t)) { roti("Transaksi ini sudah lewat 15 menit. Minta pemilik yang mengubahnya.", true); $("ubahTrx").hidden = true; return; }
@@ -1400,7 +1448,7 @@ function htmlStruk(t){
     <div class="tengah">${esc(TOKO.alamat)}</div>
     ${TOKO.kontak.map(k => `<div class="tengah">${esc(k)}</div>`).join("")}
     ${t.batal ? `<div class="tengah"><span class="batal-cap">DIBATALKAN</span></div>` : ""}
-    <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
+    <hr>${brs("No.", t.nomor || "#" + t.id)}${brs("Waktu", waktuTeks(t.waktu))}${brs("Kasir", (t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)}${t.susulan ? brs("Susulan, dicatat", t.dicatat_waktu ? waktuTeks(t.dicatat_waktu) : "-") : ""}${t.pembeli ? brs("Pembeli", t.pembeli) : ""}
     <hr>${(t.item || []).map(i => `<div>${esc(i.nama)}${i.ukuran ? " " + esc(i.ukuran) : ""}${i.tipe === "partai" ? " (partai)" : ""}</div>${brs("  " + fq(i.qty) + " x " + ribuan(i.harga), ribuan(jumlahItem(i)))}`).join("")}
     <hr><div class="tebal">${brs("TOTAL", rp(t.total))}</div>${Number(t.biaya_admin) > 0 ? brs("Biaya admin transfer", rp(t.biaya_admin)) : ""}${brs((NAMA_METODE[t.metode] || t.metode) + (t.rekening ? " ke " + t.rekening : ""), rp(t.bayar))}${Number(t.kembali) > 0 ? brs("Kembali", rp(t.kembali)) : ""}
     ${t.diubah_oleh ? `<div class="tengah" style="font-size:.9em">Diubah oleh ${esc(t.diubah_oleh)}, ${esc(waktuTeks(t.diubah_waktu))}</div>` : ""}
@@ -1776,7 +1824,7 @@ function gambarLaporan(){
     `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
   const ketMetode = t => (t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode)) + (Number(t.biaya_admin) > 0 ? " · admin " + ribuan(Number(t.biaya_admin)) : "");
-  const tanda = t => `${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}`;
+  const tanda = t => `${t.susulan ? ` <span class="cap emas">Susulan</span>` : ""}${t.batal ? ` <span class="cap merah">Batal${t.batal_oleh ? " oleh " + esc(t.batal_oleh) : ""}</span>` : t.pulih_oleh ? ` <span class="cap emas">Dikembalikan</span>` : ""}${t.diubah_oleh && !t.batal ? ` <span class="cap emas">Diubah</span>` : ""}`;
   const barisTrx = (t, denganKasir) =>
     `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${denganKasir ? esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama) + " · " : ""}${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(ketMetode(t))}${tanda(t)}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
   let isiTrx;
@@ -1902,7 +1950,7 @@ function susunPenjualan(){
     item.forEach((i, k) => {
       const pertama = k === 0;
       sel.push([
-        K(pertama ? n + 1 : "", 4), K(pertama ? tglTeks(t.waktu) + " " + jamTeks(t.waktu) : "", 8), K(pertama ? (t.nomor || "#" + t.id) : "", 8), K(pertama ? (t.pembeli || "") : "", 3),
+        K(pertama ? n + 1 : "", 4), K(pertama ? tglTeks(t.waktu) + " " + jamTeks(t.waktu) : "", 8), K(pertama ? (t.nomor || "#" + t.id) + (t.susulan ? " (SUSULAN)" : "") : "", 8), K(pertama ? (t.pembeli || "") : "", 3),
         K(i.nama + (i.ukuran ? " " + i.ukuran : "") + (i.tipe === "partai" ? " (partai)" : ""), 3), K(Number(i.qty), 4), K(Number(i.harga), 5), K(jumlahItem(i), 5),
         K(pertama ? Number(t.total) : "", 7), K(pertama ? bayar.trim() : "", 8), K(pertama ? ((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama) : "", 8),
       ]);
