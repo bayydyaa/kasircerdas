@@ -130,6 +130,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .barang.dipilih{border-color:var(--hijau);box-shadow:inset 0 0 0 1px var(--hijau)}
 .barang .nm{font-weight:700;font-size:.93rem;line-height:1.25}
 .barang .uk{grid-column:1;font-size:.8rem;color:var(--redup)}
+.barang .mr,.brs .mr{color:var(--daun);font-weight:600}
 .barang .hg{grid-row:1;grid-column:2;font-weight:800;color:var(--daun);font-size:.95rem;text-align:end}
 .barang .st{grid-row:2;grid-column:2;font-size:.76rem;color:var(--redup);text-align:end}
 .barang .st.tipis{color:#9a6a08;font-weight:700}
@@ -679,7 +680,9 @@ async function muatKatalog(){
   }
   if (!Array.isArray(data) || !data.length) throw new Error("Data produk tidak ditemukan di " + ALAMAT_KATALOG + ". Cek ALAMAT_KATALOG di bagian atas file.");
   ITEM = []; petaItem.clear();
-  /* Nama barang di kasir = nama produk di katalog, TANPA merek. Merek hanya ditambahkan (dalam kurung) kalau
+  /* Merek ditampilkan HANYA di daftar barang (kartu barang dan pilihan "mungkin sudah ada"), di bawah nama,
+     supaya kasir tahu mereknya. Merek tidak ikut ke keranjang, struk, rekap, maupun lembar penjualan.
+     Nama barang di kasir = nama produk di katalog, TANPA merek. Merek hanya ditambahkan (dalam kurung) kalau
      tanpa merek ada dua produk berbeda yang nama dan ukurannya jadi sama persis, supaya tidak tertukar.
      Merek tetap bisa dipakai untuk mencari. */
   const rapi = t => String(t).replace(/\s+/g, " ").trim().toLowerCase(), daftar = [], hitung = new Map();
@@ -698,7 +701,7 @@ async function muatKatalog(){
       if (petaItem.has(kunci)) continue;
       const kembar = hitung.get(rapi(x.nama) + "|" + rapi(u)).size > 1;
       const nama = x.nama + (kembar && x.merek ? " (" + x.merek + ")" : "");
-      const it = { kunci, nama, ukuran: u, kat: x.kat, cari: (x.nama + " " + x.merek + " " + u).toLowerCase(), kata: kataDari(x.nama + " " + x.merek + " " + u) };
+      const it = { kunci, nama, ukuran: u, kat: x.kat, merek: kembar ? "" : x.merek, cari: (x.nama + " " + x.merek + " " + u).toLowerCase(), kata: kataDari(x.nama + " " + x.merek + " " + u) };
       ITEM.push(it); petaItem.set(kunci, it);
     }
   }
@@ -1096,7 +1099,7 @@ function gambarKasir(){
     const q = barisDari(it.kunci).reduce((a, [, b]) => a + b.qty, 0), h = hargaDari(it.kunci);
     return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}">
       <span class="nm">${esc(it.nama)}</span><span class="hg angka${h ? "" : " kosong-hg"}">${h ? rp(h) : "isi harga"}</span>
-      <span class="uk">${esc(it.ukuran || (it.lain ? "Barang lain" : "Satuan"))}</span>
+      <span class="uk">${esc(it.ukuran || (it.lain ? "Barang lain" : "Satuan"))}${it.merek ? ` · <span class="mr">${esc(it.merek)}</span>` : ""}</span>
       <span class="st angka">${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
   }).join("");
   $("lebihKasir").hidden = hasil.length <= st.tampilKasir;
@@ -1148,7 +1151,7 @@ $("tambahLain").onclick = () => {
   if (!mirip.length) { tetapTambah(); return; }
   $("ketikMirip").textContent = nama;
   $("daftarMirip").innerHTML = mirip.map((it, i) =>
-    `<button class="brs" data-i="${i}"><div class="kiri"><b style="white-space:normal">${esc(it.nama)}</b><small>${esc(it.ukuran || (it.lain ? "Barang lain hari ini" : "Satuan"))}</small></div><span class="cap">Pakai ini</span></button>`).join("");
+    `<button class="brs" data-i="${i}"><div class="kiri"><b style="white-space:normal">${esc(it.nama)}</b><small>${esc(it.ukuran || (it.lain ? "Barang lain hari ini" : "Satuan"))}${it.merek ? ` · <span class="mr">${esc(it.merek)}</span>` : ""}</small></div><span class="cap">Pakai ini</span></button>`).join("");
   $("daftarMirip").onclick = e => {
     const b = e.target.closest("button[data-i]"); if (!b) return;
     const it = mirip[Number(b.dataset.i)]; $("dlgMirip").close();
