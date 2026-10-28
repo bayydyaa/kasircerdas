@@ -96,6 +96,11 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .panel{background:var(--kertas);border:1px solid var(--garis);border-radius:16px}
 .kepala-hal{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
 .kepala-hal h1{font-size:1.25rem;color:var(--daun);flex:1;min-width:160px}
+/* pilihan laporan per hari / bulan / tahun (admin dan pemilik) */
+.mode-lap{display:inline-flex;background:var(--lunak);border-radius:999px;padding:3px;gap:2px}
+.mode-lap button{border:0;background:none;padding:7px 14px;border-radius:999px;font:inherit;font-weight:700;font-size:.85rem;color:var(--teks);cursor:pointer}
+.mode-lap button.aktif{background:var(--daun);color:#fff}
+.bar-mini{display:block;height:6px;border-radius:3px;background:var(--daun);opacity:.35;margin-top:7px;min-width:3px}
 
 @media (max-width:899px){
   .tab{position:fixed;z-index:30;left:0;right:0;bottom:0;height:calc(var(--nav-b) + var(--aman-b));padding-bottom:var(--aman-b);background:var(--kertas);border-top:1px solid var(--garis);gap:0}
@@ -465,16 +470,25 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
     <section id="hal-laporan" hidden>
       <div class="kepala-hal">
         <h1 id="judulLaporan">Laporan penjualan</h1>
+        <div class="mode-lap" id="modeLaporan" data-admin hidden role="group" aria-label="Lihat laporan per">
+          <button type="button" data-m="hari" class="aktif">Hari</button><button type="button" data-m="bulan">Bulan</button><button type="button" data-m="tahun">Tahun</button>
+        </div>
         <input class="isian" id="tglLaporan" type="date" style="width:auto" aria-label="Tanggal laporan">
+        <input class="isian" id="blnLaporan" type="month" style="width:auto" aria-label="Bulan laporan" hidden>
+        <select class="isian" id="thnLaporan" style="width:auto" aria-label="Tahun laporan" hidden></select>
         <button class="btn kecil" id="muatLaporan">Muat ulang</button>
         <button class="btn kecil utama" id="eksporLaporan" data-admin hidden>Unduh rekap</button>
         <button class="btn kecil utama" id="eksporPenjualan" data-admin hidden>Unduh penjualan</button>
       </div>
       <p class="info angka" id="waktuLaporan" style="margin:-6px 0 12px"></p>
       <div class="ringkas" id="ringkasLaporan"></div>
-      <div class="dua">
+      <div class="dua" id="isiHarian">
         <div class="panel" id="terlaris"></div>
         <div class="panel" id="daftarTrx"></div>
+      </div>
+      <div class="dua" id="isiPeriode" hidden>
+        <div class="panel" id="perPeriode"></div>
+        <div class="panel" id="barangPeriode"></div>
       </div>
     </section>
 
@@ -659,7 +673,7 @@ function pesan(e){
   if (/rate limit|too many/i.test(m)) return "Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.";
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Tidak bisa terhubung. Cek internet, lalu coba lagi.";
   if (/duplicate key|kunci_kirim/i.test(m)) return "Transaksi ini sedang disimpan. Tekan Simpan sekali lagi.";
-  if (/pastikan_profil|buat_transaksi|ubah_transaksi|pulihkan_transaksi|ubah_nama|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
+  if (/laporan_periode|pastikan_profil|buat_transaksi|ubah_transaksi|pulihkan_transaksi|ubah_nama|setujui_akun|hapus_akun|schema cache|does not exist/i.test(m)) return "Database belum sesuai versi kasir ini. Jalankan file supabase-kasir.sql terbaru di Supabase.";
   return m || "Terjadi kesalahan.";
 }
 
@@ -1725,6 +1739,8 @@ $("pulihTrx").onclick = async () => {
    ========================================================= */
 const tglLokal = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 async function muatLaporan(diam){
+  if (!adalahAdmin() && st.modeLap && st.modeLap !== "hari") aturModeLaporan("hari", true);   // jabatan turun jadi karyawan
+  if (st.modeLap && st.modeLap !== "hari") return muatPeriode(diam);
   const el = $("tglLaporan"), hariIni = tglLokal(new Date());
   /* ganti hari (aplikasi dibiarkan terbuka semalaman): kembali ke tanggal hari ini */
   if (!el.value || st.hariLaporan !== hariIni) { el.value = hariIni; st.hariLaporan = hariIni; }
@@ -1995,6 +2011,89 @@ $("eksporLaporan").onclick = () => {
   try { serahkanBerkas(buatXlsxLaporan(), "rekap-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
 };
 $("tglLaporan").onchange = () => muatLaporan(); $("muatLaporan").onclick = () => muatLaporan();
+
+/* ---------- laporan bulanan dan tahunan (admin dan pemilik) ----------
+   Hanya untuk dilihat. Penjumlahan dikerjakan di database (fungsi laporan_periode). Unduh rekap dan
+   unduh penjualan tetap per hari, jadi tombolnya disembunyikan di tampilan Bulan dan Tahun. */
+const NAMA_BULAN = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const NAMA_HARI = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
+function aturModeLaporan(m, diam){
+  st.modeLap = m;
+  document.querySelectorAll("#modeLaporan button").forEach(b => b.classList.toggle("aktif", b.dataset.m === m));
+  const hari = m === "hari";
+  $("tglLaporan").hidden = !hari; $("blnLaporan").hidden = m !== "bulan"; $("thnLaporan").hidden = m !== "tahun";
+  $("eksporLaporan").style.display = $("eksporPenjualan").style.display = hari ? "" : "none";
+  $("isiHarian").hidden = !hari; $("isiPeriode").hidden = hari;
+  const skrg = new Date(), bln = skrg.getFullYear() + "-" + String(skrg.getMonth() + 1).padStart(2, "0");
+  if (!$("blnLaporan").value) $("blnLaporan").value = bln;
+  $("blnLaporan").max = bln;
+  const thn = $("thnLaporan"), tAkhir = skrg.getFullYear();
+  if (!thn.options.length || Number(thn.options[0].value) !== tAkhir) {
+    const pilih = thn.value; thn.innerHTML = "";
+    for (let y = tAkhir; y >= 2026; y--) thn.add(new Option(String(y), String(y)));
+    thn.value = pilih && [...thn.options].some(o => o.value === pilih) ? pilih : String(tAkhir);
+  }
+  if (!diam) muatLaporan();
+}
+document.querySelectorAll("#modeLaporan button").forEach(b => b.onclick = () => aturModeLaporan(b.dataset.m));
+$("blnLaporan").onchange = () => muatLaporan(); $("thnLaporan").onchange = () => muatLaporan();
+function rentangPeriode(){
+  if (st.modeLap === "bulan") {
+    const v = $("blnLaporan").value || tglLokal(new Date()).slice(0, 7), [y, m] = v.split("-").map(Number);
+    return { dari: `${v}-01`, sampai: tglLokal(new Date(y, m, 0)), judul: NAMA_BULAN[m - 1] + " " + y };
+  }
+  const y = Number($("thnLaporan").value) || new Date().getFullYear();
+  return { dari: `${y}-01-01`, sampai: `${y}-12-31`, judul: "Tahun " + y };
+}
+async function muatPeriode(diam){
+  const r = rentangPeriode(), kunci = st.modeLap + "|" + r.dari, urut = st.urutLaporan = (st.urutLaporan || 0) + 1;
+  if (!diam || !st.periode || st.periode.kunci !== kunci) {
+    $("ringkasLaporan").innerHTML = ""; $("barangPeriode").innerHTML = ""; $("perPeriode").innerHTML = `<div class="kosong">Memuat…</div>`;
+  }
+  const { data, error } = await sb.rpc("laporan_periode", { p_dari: r.dari, p_sampai: r.sampai });
+  if (urut !== st.urutLaporan) return;
+  if (error) { $("perPeriode").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
+  st.periode = { kunci, mode: st.modeLap, judul: r.judul, data: data || { harian: [], barang: [] } };
+  gambarPeriode();
+  $("waktuLaporan").textContent = r.judul + " · data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+function gambarPeriode(){
+  const P = st.periode, H = (P.data.harian || []).map(x => ({ ...x, omzet: Number(x.omzet) || 0, pembeli: Number(x.pembeli) || 0 }));
+  const jml = k => H.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  const omzet = jml("omzet"), biaya = jml("biaya"), hariBuka = H.length;
+  const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
+  $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(jml("pembeli"))) + kotak("Total cash", rp(jml("tunai")))
+    + kotak("Total transfer", rp(jml("transfer") + biaya) + (biaya > 0 ? `<small style="display:block;font-weight:600">termasuk biaya admin ${rp(biaya)}</small>` : ""))
+    + kotak("Ecer", rp(jml("ecer"))) + kotak("Partai", rp(jml("partai")))
+    + kotak("Hari berjualan", ribuan(hariBuka) + " hari") + kotak("Rata-rata per hari", rp(hariBuka ? Math.round(omzet / hariBuka) : 0));
+  let baris;
+  if (P.mode === "bulan") {
+    const maks = Math.max(1, ...H.map(x => x.omzet));
+    baris = H.slice().reverse().map(x => {
+      const [y, m, d] = String(x.tgl).slice(0, 10).split("-").map(Number), hr = NAMA_HARI[new Date(y, m - 1, d).getDay()];
+      return `<button class="brs" data-tgl="${esc(String(x.tgl).slice(0, 10))}"><div class="kiri"><b>${hr}, ${d} ${NAMA_BULAN[m - 1].slice(0, 3)}</b><small class="angka">${ribuan(x.pembeli)} pembeli</small><i class="bar-mini" style="width:${Math.round(100 * x.omzet / maks)}%"></i></div><div class="kanan angka">${rp(x.omzet)}</div></button>`;
+    }).join("");
+    $("perPeriode").innerHTML = `<h2>Per hari</h2><p class="info" style="padding:0 16px 8px">Tekan satu hari untuk melihat rinciannya.</p>` + (baris || `<div class="kosong">Belum ada penjualan di bulan ini.</div>`);
+  } else {
+    const bln = new Map();
+    for (const x of H) { const k = String(x.tgl).slice(0, 7); const g = bln.get(k) || { omzet: 0, pembeli: 0, hari: 0 }; g.omzet += x.omzet; g.pembeli += x.pembeli; g.hari++; bln.set(k, g); }
+    const maks = Math.max(1, ...[...bln.values()].map(g => g.omzet));
+    baris = [...bln.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, g]) => {
+      const [y, m] = k.split("-").map(Number);
+      return `<button class="brs" data-bln="${esc(k)}"><div class="kiri"><b>${NAMA_BULAN[m - 1]} ${y}</b><small class="angka">${ribuan(g.pembeli)} pembeli · ${g.hari} hari</small><i class="bar-mini" style="width:${Math.round(100 * g.omzet / maks)}%"></i></div><div class="kanan angka">${rp(g.omzet)}</div></button>`;
+    }).join("");
+    $("perPeriode").innerHTML = `<h2>Per bulan</h2><p class="info" style="padding:0 16px 8px">Tekan satu bulan untuk melihat rinciannya.</p>` + (baris || `<div class="kosong">Belum ada penjualan di tahun ini.</div>`);
+  }
+  const B = P.data.barang || [];
+  $("barangPeriode").innerHTML = `<h2>Barang terlaris</h2><p class="info" style="padding:0 16px 8px">15 barang dengan omzet terbesar.</p>` + (B.length ? B.map((x, i) =>
+    `<div class="brs"><div class="kiri"><b>${i + 1}. ${esc(x.nama)}${x.ukuran ? " " + esc(x.ukuran) : ""}</b><small class="angka">terjual ${fq(Number(x.qty))} · laku di ${ribuan(Number(x.hari))} hari</small></div><div class="kanan angka">${rp(Number(x.uang))}</div></div>`).join("")
+    : `<div class="kosong">Belum ada penjualan.</div>`);
+}
+$("perPeriode").addEventListener("click", ev => {
+  const b = ev.target.closest("button.brs"); if (!b) return;
+  if (b.dataset.tgl) { $("tglLaporan").value = b.dataset.tgl; st.hariLaporan = tglLokal(new Date()); aturModeLaporan("hari"); }
+  else if (b.dataset.bln) { $("blnLaporan").value = b.dataset.bln; aturModeLaporan("bulan"); }
+});
 $("daftarTrx").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (!b) return; const t = st.trx.find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false); });
 
 /* =========================================================
