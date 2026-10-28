@@ -194,10 +194,14 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 }
 
 /* ---------- laporan ---------- */
-.ringkas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.ringkas{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:14px}
+/* bulanan/tahunan: 8 kotak, selalu rapi 4 x 2 (HP: 2 kolom), tidak ada kotak yang tertinggal sendirian */
+.ringkas.periode{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:700px){.ringkas,.ringkas.periode{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ringkas div{padding:14px 16px}
 .ringkas small{display:block;color:var(--redup);font-weight:600;font-size:.82rem}
-.ringkas b{font-size:1.35rem;color:var(--daun);font-weight:800}
+.ringkas b{display:block;font-size:clamp(1.05rem,.85rem + .9vw,1.35rem);line-height:1.25;color:var(--daun);font-weight:800;white-space:nowrap}   /* angka panjang diperkecil oleh pasKotak() */
+.ringkas b small{white-space:normal;font-size:.8rem}
 /* kolom memakai minmax(0,...) supaya nama barang yang panjang dipotong "...", bukan melebarkan halaman */
 .dua{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 .dua>*{min-width:0}
@@ -1832,6 +1836,14 @@ async function muatLainBarang(){
     : `<div class="kosong">Tidak ada barang yang diketik manual di tanggal ini.</div>`;
 }
 $("tglLain").onchange = () => { st.hariLain = tglLokal(new Date()); muatLainBarang(); };
+/* angka di kotak ringkasan selalu satu baris: kalau tidak muat, hurufnya diperkecil sedikit demi sedikit */
+function pasKotak(){
+  document.querySelectorAll("#ringkasLaporan b").forEach(b => {
+    b.style.fontSize = ""; let uk = parseFloat(getComputedStyle(b).fontSize);
+    while (b.scrollWidth > b.clientWidth + 1 && uk > 11) { uk -= 1; b.style.fontSize = uk + "px"; }
+  });
+}
+window.addEventListener("resize", () => { if (st.hal === "laporan") pasKotak(); });
 function gambarLaporan(){
   const sah = st.trx.filter(t => !t.batal);
   let omzet = 0, tunai = 0, biaya = 0;
@@ -1839,6 +1851,7 @@ function gambarLaporan(){
   const kotak = (label, nilai) => `<div class="panel"><small>${label}</small><b class="angka">${nilai}</b></div>`;
   const rekap = rekapBarang(sah), partai = rekap.reduce((a, x) => a + x.uangPartai, 0);
   $("ringkasLaporan").innerHTML = kotak("Omzet", rp(omzet)) + kotak("Jumlah pembeli", ribuan(sah.length)) + kotak("Total cash", rp(tunai)) + kotak("Total transfer", rp(omzet - tunai + biaya) + (biaya > 0 ? `<small style="display:block;font-weight:600">termasuk biaya admin ${rp(biaya)}</small>` : "")) + kotak("Ecer", rp(omzet - partai)) + kotak("Partai", rp(partai));
+  pasKotak();
   $("terlaris").innerHTML = `<h2>Barang terjual</h2>` + (rekap.length ? rekap.map(x =>
     `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan di tanggal ini.</div>`);
@@ -2024,6 +2037,7 @@ function aturModeLaporan(m, diam){
   $("tglLaporan").hidden = !hari; $("blnLaporan").hidden = m !== "bulan"; $("thnLaporan").hidden = m !== "tahun";
   $("eksporLaporan").style.display = $("eksporPenjualan").style.display = hari ? "" : "none";
   $("isiHarian").hidden = !hari; $("isiPeriode").hidden = hari;
+  $("ringkasLaporan").classList.toggle("periode", !hari);
   const skrg = new Date(), bln = skrg.getFullYear() + "-" + String(skrg.getMonth() + 1).padStart(2, "0");
   if (!$("blnLaporan").value) $("blnLaporan").value = bln;
   $("blnLaporan").max = bln;
@@ -2066,6 +2080,7 @@ function gambarPeriode(){
     + kotak("Total transfer", rp(jml("transfer") + biaya) + (biaya > 0 ? `<small style="display:block;font-weight:600">termasuk biaya admin ${rp(biaya)}</small>` : ""))
     + kotak("Ecer", rp(jml("ecer"))) + kotak("Partai", rp(jml("partai")))
     + kotak("Hari berjualan", ribuan(hariBuka) + " hari") + kotak("Rata-rata per hari", rp(hariBuka ? Math.round(omzet / hariBuka) : 0));
+  pasKotak();
   let baris;
   if (P.mode === "bulan") {
     const maks = Math.max(1, ...H.map(x => x.omzet));
@@ -2084,7 +2099,7 @@ function gambarPeriode(){
     }).join("");
     $("perPeriode").innerHTML = `<h2>Per bulan</h2><p class="info" style="padding:0 16px 8px">Tekan satu bulan untuk melihat rinciannya.</p>` + (baris || `<div class="kosong">Belum ada penjualan di tahun ini.</div>`);
   }
-  const B = P.data.barang || [];
+  const B = (P.data.barang || []).map(x => { const k = ITEM.find(i => i.kunci === x.kunci); return k ? { ...x, nama: k.nama, ukuran: k.ukuran || "" } : x; });
   $("barangPeriode").innerHTML = `<h2>Barang terlaris</h2><p class="info" style="padding:0 16px 8px">15 barang dengan omzet terbesar.</p>` + (B.length ? B.map((x, i) =>
     `<div class="brs"><div class="kiri"><b>${i + 1}. ${esc(x.nama)}${x.ukuran ? " " + esc(x.ukuran) : ""}</b><small class="angka">terjual ${fq(Number(x.qty))} · laku di ${ribuan(Number(x.hari))} hari</small></div><div class="kanan angka">${rp(Number(x.uang))}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan.</div>`);
