@@ -32,8 +32,8 @@ const ALAMAT_KATALOG = "https://bayydyaa.github.io/PertanianCerdas/";
 <style>
 :root{
   --daun:#0f3d24; --hijau:#1d7a3e; --hijau-terang:#2f9b52; --emas:#c9993a;
-  --mutiara:#f7f5ee; --kertas:#ffffff; --teks:#1c2a22; --redup:#56655b;
-  --garis:#dfe5da; --lunak:#eef3ea; --merah:#b3372f; --merah-lunak:#fbeceb; --emas-lunak:#fbf4e3;
+  --mutiara:#f1f5ec; --kertas:#ffffff; --teks:#1c2a22; --redup:#56655b;
+  --garis:#dbe3d4; --lunak:#eaf1e4; --merah:#b3372f; --merah-lunak:#fbeceb; --emas-lunak:#fbf4e3;
   --nav-b:62px; --aman-b:env(safe-area-inset-bottom,0px); --aman-t:env(safe-area-inset-top,0px);
 }
 *{box-sizing:border-box}
@@ -61,9 +61,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .info{color:var(--redup);font-size:.9rem}
 
 /* ---------- layar masuk ---------- */
-.layar{min-height:100dvh;display:grid;place-items:center;padding:calc(24px + var(--aman-t)) 18px calc(24px + var(--aman-b));background:
-  radial-gradient(70% 50% at 100% 0%,rgba(201,153,58,.18),transparent 70%),
-  linear-gradient(160deg,#0f3d24,#17512f 55%,#0c3120)}
+.layar{min-height:100dvh;display:grid;place-items:center;padding:calc(24px + var(--aman-t)) 18px calc(24px + var(--aman-b));background:#0d3a24 url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 800%22 preserveAspectRatio=%22xMidYMax slice%22%3E%3Cdefs%3E%3ClinearGradient id=%22l%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230b3220%22/%3E%3Cstop offset=%22.55%22 stop-color=%22%23135033%22/%3E%3Cstop offset=%221%22 stop-color=%22%230d3a24%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22400%22 height=%22800%22 fill=%22url(%23l)%22/%3E%3Ccircle cx=%22300%22 cy=%2278%22 r=%2264%22 fill=%22%23d8a632%22 fill-opacity=%22.22%22/%3E%3Ccircle cx=%22300%22 cy=%2278%22 r=%2236%22 fill=%22%23e9bf4f%22 fill-opacity=%22.55%22/%3E%3Cpath d=%22M0 470 C90 430 180 480 270 450 S380 410 400 420 V800 H0Z%22 fill=%22%23164f31%22/%3E%3Cpath d=%22M0 540 C110 500 200 560 300 525 S390 495 400 500 V800 H0Z%22 fill=%22%231b5d38%22/%3E%3Cpath d=%22M0 610 C100 580 220 630 320 600 S395 575 400 578 V800 H0Z%22 fill=%22%23216a40%22/%3E%3Cpath d=%22M0 680 C120 655 230 700 330 672 S398 655 400 656 V800 H0Z%22 fill=%22%23287649%22/%3E%3Cpath d=%22M0 470 C90 430 180 480 270 450 S380 410 400 420%22 fill=%22none%22 stroke=%22%23d8b14a%22 stroke-opacity=%22.5%22 stroke-width=%222%22/%3E%3Cpath d=%22M0 540 C110 500 200 560 300 525 S390 495 400 500%22 fill=%22none%22 stroke=%22%23d8b14a%22 stroke-opacity=%22.4%22 stroke-width=%221.6%22/%3E%3Cpath d=%22M0 610 C100 580 220 630 320 600 S395 575 400 578%22 fill=%22none%22 stroke=%22%23d8b14a%22 stroke-opacity=%22.32%22 stroke-width=%221.4%22/%3E%3Cpath d=%22M0 680 C120 655 230 700 330 672 S398 655 400 656%22 fill=%22none%22 stroke=%22%23d8b14a%22 stroke-opacity=%22.25%22 stroke-width=%221.2%22/%3E%3C/svg%3E") center bottom/cover no-repeat}
 .kotak{width:100%;max-width:420px;background:var(--kertas);border-radius:22px;padding:26px 22px;box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
 .kotak .merek{display:flex;align-items:center;gap:12px;margin-bottom:18px}
 .kotak .merek img{width:52px;height:52px;border-radius:14px;object-fit:cover}
@@ -79,6 +77,9 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 
 /* ---------- kerangka aplikasi ---------- */
 .atas{position:sticky;top:0;z-index:20;background:var(--daun);color:#fff;padding-top:var(--aman-t)}
+/* sawah bertingkat di tepi bawah header: ciri toko pertanian, tidak mengganggu tulisan */
+.atas::after{content:"";position:absolute;inset:auto 0 0 0;height:26px;pointer-events:none;opacity:.9;background:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 70%22 preserveAspectRatio=%22none%22%3E%3Cpath d=%22M0 52 C120 30 230 60 340 44 S520 22 600 34 V70 H0Z%22 fill=%22%2317512f%22/%3E%3Cpath d=%22M0 60 C140 44 250 70 380 56 S540 40 600 50 V70 H0Z%22 fill=%22%231d6a3c%22/%3E%3Cpath d=%22M0 66 C150 58 300 72 440 62 S560 56 600 60 V70 H0Z%22 fill=%22%232a7f48%22/%3E%3Cpath d=%22M0 52 C120 30 230 60 340 44 S520 22 600 34%22 fill=%22none%22 stroke=%22%23d8b14a%22 stroke-opacity=%22.55%22 stroke-width=%221.4%22/%3E%3Cpath d=%22M0 60 C140 44 250 70 380 56 S540 40 600 50%22 fill=%22none%22 stroke=%22%23e6cf7a%22 stroke-opacity=%22.35%22 stroke-width=%221%22/%3E%3C/svg%3E") center bottom/100% 100% no-repeat}
+.atas .baris{position:relative;z-index:1}
 .atas .baris{display:flex;align-items:center;gap:12px;max-width:1280px;margin:0 auto;padding:10px 16px}
 .atas img{width:36px;height:36px;border-radius:10px;object-fit:cover;flex:none}
 .atas .judul{flex:1;min-width:0;text-align:start;color:inherit}
@@ -125,6 +126,8 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .chip-rel::-webkit-scrollbar{display:none}
 .chip{flex:none;min-height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--garis);background:var(--kertas);font-weight:600;font-size:.86rem;color:var(--redup);white-space:nowrap}
 .chip[aria-pressed="true"]{background:var(--daun);border-color:var(--daun);color:#fff}
+.chip[style*="--kat"]::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--kat);margin-inline-end:7px;vertical-align:1px}
+.chip[aria-pressed="true"][style*="--kat"]::before{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
 
 /* ---------- kasir ---------- */
 .kasir-tata{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
@@ -133,6 +136,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .barang{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;text-align:start;padding:12px 14px;background:var(--kertas);border:1px solid var(--garis);border-radius:14px;min-height:68px;transition:border-color .15s,transform .1s}
 .barang:active{transform:scale(.985)}
 .barang.dipilih{border-color:var(--hijau);box-shadow:inset 0 0 0 1px var(--hijau)}
+.barang[style*="--kat"]{border-inline-start:5px solid var(--kat)}
 .barang .nm{font-weight:700;font-size:.93rem;line-height:1.25}
 .barang .uk{grid-column:1;font-size:.8rem;color:var(--redup)}
 .barang .mr,.brs .mr{color:var(--daun);font-weight:600}
@@ -144,6 +148,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .barang:disabled{opacity:.55;cursor:not-allowed}
 .kosong{padding:28px 18px;text-align:center;color:var(--redup)}
 .kosong h3{color:var(--daun);font-size:1.02rem;margin-bottom:6px}
+.kosong h3::before{content:"";display:block;width:46px;height:46px;margin:0 auto 10px;background:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Cpath d=%22M24 44V22%22 stroke=%22%232f7d4a%22 stroke-width=%223%22 stroke-linecap=%22round%22 fill=%22none%22/%3E%3Cpath d=%22M24 26c0-8-6-13-15-13 0 8 6 13 15 13z%22 fill=%22%235aa86c%22/%3E%3Cpath d=%22M24 22c0-9 6-15 16-15 0 9-6 15-16 15z%22 fill=%22%232f9b52%22/%3E%3Cpath d=%22M12 44h24%22 stroke=%22%238a5a2b%22 stroke-width=%223%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") center/contain no-repeat}
 .lebih{display:flex;justify-content:center;margin-top:14px}
 
 .keranjang{display:flex;flex-direction:column;background:var(--kertas)}
@@ -626,6 +631,8 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
 "use strict";
 const TOKO = { nama: "CV Azzahra Mutiara Tani", alamat: "Jl. Soekarno Hatta, Tondo, Palu", kontak: ["WA 0852-2555-5451 owner", "WA 0823-5333-3662 admin"] };
 const KATEGORI = ["Herbisida Selektif","Herbisida","Fungisida","Insektisida","Benih","Saprodi","Pupuk 1","Pupuk 2"];
+/* warna kategori, sama dengan titik warna di e-katalog: membantu mengenali jenis barang sekilas */
+const WARNA_KAT = ["#139a8f","#e07b2a","#5b5bd6","#d6453d","#2e9a55","#6b7280","#8a5a2b","#7aa83a"];
 const PER_HALAMAN = 60;
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -1018,7 +1025,7 @@ function gambarChip(idEl, kunciSt, gambarUlang){
   const el = $(idEl), jumlah = new Array(KATEGORI.length).fill(0);
   ITEM.forEach(it => { if (jumlah[it.kat] != null) jumlah[it.kat]++; });
   el.innerHTML = `<button class="chip" data-k="-1" aria-pressed="${st[kunciSt] === -1}">Semua</button>` +
-    KATEGORI.map((k, i) => jumlah[i] ? `<button class="chip" data-k="${i}" aria-pressed="${st[kunciSt] === i}">${esc(k)}</button>` : "").join("");
+    KATEGORI.map((k, i) => jumlah[i] ? `<button class="chip" data-k="${i}" style="--kat:${WARNA_KAT[i]}" aria-pressed="${st[kunciSt] === i}">${esc(k)}</button>` : "").join("");
   el.onclick = e => {
     const b = e.target.closest(".chip"); if (!b) return;
     st[kunciSt] = Number(b.dataset.k);
@@ -1115,7 +1122,7 @@ function gambarKasir(){
   $("kosongKasir").hidden = true;
   el.innerHTML = hasil.slice(0, st.tampilKasir).map(it => {
     const q = barisDari(it.kunci).reduce((a, [, b]) => a + b.qty, 0), h = hargaDari(it.kunci);
-    return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}">
+    return `<button class="barang${q ? " dipilih" : ""}" data-k="${esc(it.kunci)}"${WARNA_KAT[it.kat] ? ` style="--kat:${WARNA_KAT[it.kat]}"` : ""}>
       <span class="nm">${esc(it.nama)}</span><span class="hg angka${h ? "" : " kosong-hg"}">${h ? rp(h) : "isi harga"}</span>
       <span class="uk">${esc(it.ukuran || (it.lain ? "Barang lain" : "Satuan"))}${it.merek ? ` · <span class="mr">${esc(it.merek)}</span>` : ""}</span>
       <span class="st angka">${q ? `<span class="jml">${fq(q)}</span>` : ""}</span></button>`;
