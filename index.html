@@ -101,6 +101,7 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .mode-lap{display:inline-flex;background:var(--lunak);border-radius:999px;padding:3px;gap:2px}
 .mode-lap button{border:0;background:none;padding:7px 14px;border-radius:999px;font:inherit;font-weight:700;font-size:.85rem;color:var(--teks);cursor:pointer}
 .mode-lap button.aktif{background:var(--daun);color:#fff}
+.sub-tgl{padding:10px 16px 6px;font-weight:800;font-size:.85rem;color:var(--daun);background:var(--lunak);border-top:1px solid var(--garis)}
 .bar-mini{display:block;height:6px;border-radius:3px;background:var(--daun);opacity:.35;margin-top:7px;min-width:3px}
 
 @media (max-width:899px){
@@ -499,6 +500,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <div class="panel" id="perPeriode"></div>
         <div class="panel" id="barangPeriode"></div>
       </div>
+      <div class="panel" id="trxPeriode" style="margin-top:14px" hidden></div>
     </section>
 
     <!-- ----- BARANG (admin) ----- -->
@@ -879,7 +881,7 @@ $("cekLagi").onclick = async () => {
 async function keluar(){
   try { await sb.auth.signOut(); } catch (e) {}
   st.drafSiap = false; buangDraf();
-  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.ubah = null; st.benihKirim = null; aturPitaUbah();
+  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.trxBulan = null; st.bulanTrx = null; st.periode = null; st.ubah = null; st.benihKirim = null; aturPitaUbah();
   document.body.classList.remove("kr-buka");
   aturMode(false); tampilLayar("layarMasuk");
 }
@@ -1730,7 +1732,8 @@ $("batalTrx").onclick = async () => {
     if (error) throw error;
     $("dlgStruk").close(); roti("Transaksi dibatalkan.");
     const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data;
-    gambarLaporan(); try { await muatBarang(); } catch (e) {}
+    if (st.modeLap && st.modeLap !== "hari") muatLaporan(true); else gambarLaporan();
+    try { await muatBarang(); } catch (e) {}
   } catch (e) { roti(pesan(e), true); }
 };
 $("pulihTrx").onclick = async () => {
@@ -1741,7 +1744,7 @@ $("pulihTrx").onclick = async () => {
     if (error) throw error;
     $("dlgStruk").close(); roti("Transaksi dikembalikan.");
     const i = st.trx.findIndex(x => x.id === data.id); if (i >= 0) st.trx[i] = data;
-    gambarLaporan();
+    if (st.modeLap && st.modeLap !== "hari") muatLaporan(true); else gambarLaporan();
   } catch (e) { roti(pesan(e), true); }
 };
 
@@ -1890,11 +1893,12 @@ function gambarLaporan(){
 const BULAN = ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"];
 /* Gaya sel untuk Excel: 0 polos, 1 judul, 2 kepala tabel, 3 teks, 4 angka tengah, 5 uang,
    6 label total, 7 uang total, 8 teks tengah, 9 kosong bergaris. Semua kecuali 0 dan 1 bergaris hitam penuh. */
-function susunLaporan(){
-  const sah = st.trx.filter(t => !t.batal), [y, m, d] = $("tglLaporan").value.split("-");
+function judulTanggal(){ const [y, m, d] = $("tglLaporan").value.split("-"); return `${d} ${BULAN[Number(m) - 1]} ${y}`; }
+function susunLaporan(trx = st.trx, judul = judulTanggal()){
+  const sah = trx.filter(t => !t.batal);
   const rekap = rekapBarang(sah), sel = [], gabung = [];
   const K = (v, g) => ({ v, g }), brs = () => sel.length + 1;                 // nomor baris Excel berikutnya
-  sel.push([K(`BULAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:F1");
+  sel.push([K(`BULAN ${judul}`, 1)]); gabung.push("A1:F1");
   sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:F2");
   sel.push([K("NAMA PRODUCT", 2), K("", 2), K("QTY", 2), K("HARGA", 2), K("JUMLAH UANG", 2), K("KET", 2)]); gabung.push("A3:B3");
   rekap.forEach((x, i) => sel.push([K(i + 1, 4), K(x.nama, 3), K(x.qty, 4), K(x.harga, 5), K(x.uang, 5), K(x.tipe === "partai" ? "PARTAI" : x.tipe === "campur" ? "ECER+PARTAI" : "ECER", 8)]));
@@ -1963,8 +1967,8 @@ function buatXlsx(sel, gabung, lebar, namaLembar, mendatar){
     ["xl/worksheets/sheet1.xml", lembarXml(sel, gabung, lebar, mendatar)],
   ]);
 }
-function buatXlsxLaporan(){
-  const { sel, gabung } = susunLaporan();
+function buatXlsxLaporan(trx, judul){
+  const { sel, gabung } = susunLaporan(trx, judul);
   return buatXlsx(sel, gabung, [5, 40, 9, 13, 16, 15], "Rekap", false);
 }
 
@@ -1974,10 +1978,10 @@ function buatXlsxLaporan(){
    Transaksi dengan beberapa barang memakai beberapa baris; kolom miliknya (No sampai Customer, Total sampai
    Dicatat oleh) digabung ke bawah. Urut dari penjualan paling awal. Yang dibatalkan tidak ikut. */
 const tglTeks = iso => { const d = new Date(iso); return String(d.getDate()).padStart(2, "0") + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + d.getFullYear(); };
-function susunPenjualan(){
-  const sah = st.trx.filter(t => !t.batal).slice().reverse(), [y, m, d] = $("tglLaporan").value.split("-");
+function susunPenjualan(trx = st.trx, judul = judulTanggal()){
+  const sah = trx.filter(t => !t.batal).slice().reverse();
   const sel = [], gabung = [], K = (v, g) => ({ v, g }), brs = () => sel.length + 1;
-  sel.push([K(`PENJUALAN ${d} ${BULAN[Number(m) - 1]} ${y}`, 1)]); gabung.push("A1:K1");
+  sel.push([K(`PENJUALAN ${judul}`, 1)]); gabung.push("A1:K1");
   sel.push([K(`JUMLAH PEMBELI : ${sah.length} ORANG`, 1)]); gabung.push("A2:K2");
   sel.push(["NO", "TANGGAL", "NO. TRANSAKSI", "NAMA CUSTOMER", "JENIS BARANG", "QTY", "HARGA", "JUMLAH", "TOTAL", "BAYAR", "DICATAT OLEH"].map(t => K(t, 2)));
   let total = 0, tf = 0, biaya = 0;
@@ -2002,8 +2006,8 @@ function susunPenjualan(){
   }
   return { sel, gabung, baris: sel.map(r => r.map(c => c.v)) };
 }
-function buatXlsxPenjualan(){
-  const { sel, gabung } = susunPenjualan();
+function buatXlsxPenjualan(trx, judul){
+  const { sel, gabung } = susunPenjualan(trx, judul);
   return buatXlsx(sel, gabung, [5, 17, 18, 20, 40, 7, 12, 13, 13, 20, 20], "Penjualan", true);
 }
 /* di HP (terutama aplikasi yang dipasang di iPhone) unduhan biasa sering tidak jalan: pakai menu bagikan */
@@ -2021,11 +2025,13 @@ function serahkanBerkas(blob, nama){
 /* unduhan hanya boleh dibuat dari data yang memang milik tanggal yang sedang dipilih */
 const laporanSiap = () => { if (st.tglTrx === $("tglLaporan").value) return true; roti("Laporan tanggal ini belum selesai dimuat. Tunggu sebentar, atau tekan Muat ulang.", true); return false; };
 $("eksporPenjualan").onclick = () => {
+  if (st.modeLap === "bulan") return unduhBulan("penjualan");
   if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxPenjualan(), "penjualan-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
 };
 $("eksporLaporan").onclick = () => {
+  if (st.modeLap === "bulan") return unduhBulan("rekap");
   if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxLaporan(), "rekap-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
@@ -2033,8 +2039,9 @@ $("eksporLaporan").onclick = () => {
 $("tglLaporan").onchange = () => muatLaporan(); $("muatLaporan").onclick = () => muatLaporan();
 
 /* ---------- laporan bulanan dan tahunan (admin dan pemilik) ----------
-   Hanya untuk dilihat. Penjumlahan dikerjakan di database (fungsi laporan_periode). Unduh rekap dan
-   unduh penjualan tetap per hari, jadi tombolnya disembunyikan di tampilan Bulan dan Tahun. */
+   Ringkasan dan per hari/per bulan dijumlahkan di database (fungsi laporan_periode).
+   Bulan: semua barang terjual dan semua transaksi bulan itu ikut dimuat, supaya bisa ditelusuri, dan
+   Unduh rekap / Unduh penjualan menghasilkan file sebulan penuh. Tahun: hanya ringkasan. */
 const NAMA_BULAN = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 const NAMA_HARI = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
 function aturModeLaporan(m, diam){
@@ -2042,7 +2049,8 @@ function aturModeLaporan(m, diam){
   document.querySelectorAll("#modeLaporan button").forEach(b => b.classList.toggle("aktif", b.dataset.m === m));
   const hari = m === "hari";
   $("tglLaporan").hidden = !hari; $("blnLaporan").hidden = m !== "bulan"; $("thnLaporan").hidden = m !== "tahun";
-  $("eksporLaporan").style.display = $("eksporPenjualan").style.display = hari ? "" : "none";
+  $("eksporLaporan").style.display = $("eksporPenjualan").style.display = m === "tahun" ? "none" : "";
+  $("trxPeriode").hidden = m !== "bulan";
   $("isiHarian").hidden = !hari; $("isiPeriode").hidden = hari;
   $("ringkasLaporan").classList.toggle("periode", !hari);
   const skrg = new Date(), bln = skrg.getFullYear() + "-" + String(skrg.getMonth() + 1).padStart(2, "0");
@@ -2075,6 +2083,18 @@ async function muatPeriode(diam){
   if (urut !== st.urutLaporan) return;
   if (error) { $("perPeriode").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
   st.periode = { kunci, mode: st.modeLap, judul: r.judul, data: data || { harian: [], barang: [] } };
+  if (st.modeLap === "bulan") {
+    if (st.trxBulan && st.bulanTrx !== r.dari) { st.trxBulan = null; st.bulanTrx = null; st.tampilTrxBln = 100; }
+    const [y, m] = r.dari.split("-").map(Number), awal = new Date(y, m - 1, 1), akhir = new Date(y, m, 1), semua = [];
+    for (let dari = 0; ; dari += 1000) {
+      const { data: d2, error: e2 } = await sb.from("transaksi").select("*").gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString())
+        .order("waktu", { ascending: false }).order("id", { ascending: false }).range(dari, dari + 999);
+      if (urut !== st.urutLaporan) return;
+      if (e2) { $("perPeriode").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(e2))}</p></div>`; return; }
+      semua.push(...(d2 || [])); if (!d2 || d2.length < 1000) break;
+    }
+    st.trxBulan = semua; st.bulanTrx = r.dari; st.judulBulan = r.judul;
+  }
   gambarPeriode();
   $("waktuLaporan").textContent = r.judul + " · data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
@@ -2106,10 +2126,46 @@ function gambarPeriode(){
     }).join("");
     $("perPeriode").innerHTML = `<h2>Per bulan</h2><p class="info" style="padding:0 16px 8px">Tekan satu bulan untuk melihat rinciannya.</p>` + (baris || `<div class="kosong">Belum ada penjualan di tahun ini.</div>`);
   }
+  if (P.mode === "bulan" && st.trxBulan) { gambarBarangBulan(); gambarTrxBulan(); return; }
   const B = (P.data.barang || []).map(x => { const k = ITEM.find(i => i.kunci === x.kunci); return k ? { ...x, nama: k.nama, ukuran: k.ukuran || "" } : x; });
   $("barangPeriode").innerHTML = `<h2>Barang terlaris</h2><p class="info" style="padding:0 16px 8px">15 barang dengan omzet terbesar.</p>` + (B.length ? B.map((x, i) =>
     `<div class="brs"><div class="kiri"><b>${i + 1}. ${esc(x.nama)}${x.ukuran ? " " + esc(x.ukuran) : ""}</b><small class="angka">terjual ${fq(Number(x.qty))} · laku di ${ribuan(Number(x.hari))} hari</small></div><div class="kanan angka">${rp(Number(x.uang))}</div></div>`).join("")
     : `<div class="kosong">Belum ada penjualan.</div>`);
+}
+/* Bulan: semua barang terjual, disusun persis seperti rekap harian (barang + harga), tetapi sebulan penuh */
+function gambarBarangBulan(){
+  const rekap = rekapBarang(st.trxBulan.filter(t => !t.batal)), total = rekap.reduce((a, x) => a + x.uang, 0);
+  $("barangPeriode").innerHTML = `<h2>Semua barang terjual</h2><p class="info" style="padding:0 16px 8px">${ribuan(rekap.length)} baris barang, total ${rp(total)}. Harga berbeda dicatat terpisah, sama seperti rekap harian.</p>` +
+    (rekap.length ? rekap.map(x =>
+      `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
+     : `<div class="kosong">Belum ada penjualan di bulan ini.</div>`);
+}
+/* Bulan: semua transaksi, dikelompokkan per tanggal (terbaru di atas), dibuka bertahap 100 per tekan */
+function gambarTrxBulan(){
+  const T = st.trxBulan, n = st.tampilTrxBln || 100, batal = T.filter(t => t.batal).length;
+  let html = `<h2>Semua transaksi</h2><p class="info" style="padding:0 16px 8px">${ribuan(T.length - batal)} transaksi${batal ? `, ${batal} dibatalkan` : ""}. Tekan satu transaksi untuk melihat struknya.</p>`;
+  let tglSblm = "";
+  for (const t of T.slice(0, n)) {
+    const tgl = tglLokal(new Date(t.waktu));
+    if (tgl !== tglSblm) { const d = new Date(t.waktu); html += `<div class="sub-tgl">${NAMA_HARI[d.getDay()]}, ${d.getDate()} ${NAMA_BULAN[d.getMonth()]} ${d.getFullYear()}</div>`; tglSblm = tgl; }
+    const metode = (t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode)) + (Number(t.biaya_admin) > 0 ? " · admin " + ribuan(Number(t.biaya_admin)) : "");
+    html += `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)} · ${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(metode)}${t.susulan ? ` <span class="cap emas">Susulan</span>` : ""}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
+  }
+  if (!T.length) html += `<div class="kosong">Belum ada transaksi di bulan ini.</div>`;
+  else if (T.length > n) html += `<div style="padding:12px 16px;text-align:center"><button class="btn kecil" id="lebihTrxBln" type="button">Tampilkan lebih banyak (${ribuan(T.length - n)} lagi)</button></div>`;
+  $("trxPeriode").innerHTML = html;
+}
+$("trxPeriode").addEventListener("click", e => {
+  if (e.target.closest("#lebihTrxBln")) { st.tampilTrxBln = (st.tampilTrxBln || 100) + 100; gambarTrxBulan(); return; }
+  const b = e.target.closest("button[data-id]"); if (!b) return;
+  const t = (st.trxBulan || []).find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false);
+});
+function unduhBulan(jenis){
+  const r = rentangPeriode();
+  if (!st.trxBulan || st.bulanTrx !== r.dari) { roti("Laporan bulan ini belum selesai dimuat. Tunggu sebentar, atau tekan Muat ulang.", true); return; }
+  if (!st.trxBulan.some(t => !t.batal)) { roti("Belum ada penjualan di bulan ini.", true); return; }
+  const judul = r.judul.toUpperCase(), nama = (jenis === "rekap" ? "rekap-" : "penjualan-") + r.dari.slice(0, 7) + ".xlsx";
+  try { serahkanBerkas(jenis === "rekap" ? buatXlsxLaporan(st.trxBulan, judul) : buatXlsxPenjualan(st.trxBulan, judul), nama); } catch (e) { roti(pesan(e), true); }
 }
 $("perPeriode").addEventListener("click", ev => {
   const b = ev.target.closest("button.brs"); if (!b) return;
@@ -2311,7 +2367,7 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
   sb.auth.onAuthStateChange((ev, sesi) => {
     if (ev === "PASSWORD_RECOVERY") { pemulihan = true; if (sesi && sesi.user) bukaSandiBaru(sesi.user); }
   });
-  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
+  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT" && profil) { st.drafSiap = false; pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.trxBulan = null; st.bulanTrx = null; st.periode = null; st.ubah = null; st.benihKirim = null; aturPitaUbah(); document.body.classList.remove("kr-buka"); aturMode(false); tampilLayar("layarMasuk"); } });
   try {
     const { data } = await sb.auth.getSession();
     if (data && data.session) {
