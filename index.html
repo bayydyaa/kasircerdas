@@ -2079,6 +2079,9 @@ function rentangPeriode(){
   return { dari: `${y}-01-01`, sampai: `${y}-12-31`, judul: "Tahun " + y };
 }
 async function muatPeriode(diam){
+  /* penyegaran otomatis (tiap menit) untuk Bulan/Tahun dibatasi 10 menit sekali: data sebulan bisa ratusan
+     transaksi, jangan diunduh ulang tiap menit selama layar dibiarkan terbuka */
+  if (diam && st.periode && st.periodeWaktu && Date.now() - st.periodeWaktu < 600000) return;
   const r = rentangPeriode(), kunci = st.modeLap + "|" + r.dari, urut = st.urutLaporan = (st.urutLaporan || 0) + 1;
   if (!diam || !st.periode || st.periode.kunci !== kunci) {
     $("ringkasLaporan").innerHTML = ""; $("barangPeriode").innerHTML = ""; $("perPeriode").innerHTML = `<div class="kosong">Memuat…</div>`;
@@ -2099,7 +2102,7 @@ async function muatPeriode(diam){
     }
     st.trxBulan = semua; st.bulanTrx = r.dari; st.judulBulan = r.judul;
   }
-  gambarPeriode();
+  st.periodeWaktu = Date.now(); gambarPeriode();
   $("waktuLaporan").textContent = r.judul + " · data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 function gambarPeriode(){
