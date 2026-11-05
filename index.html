@@ -101,6 +101,10 @@ label.lbl{display:block;font-size:.86rem;font-weight:700;margin:14px 0 6px;color
 .mode-lap{display:inline-flex;background:var(--lunak);border-radius:999px;padding:3px;gap:2px}
 .mode-lap button{border:0;background:none;padding:7px 14px;border-radius:999px;font:inherit;font-weight:700;font-size:.85rem;color:var(--teks);cursor:pointer}
 .mode-lap button.aktif{background:var(--daun);color:#fff}
+.kar-kepala{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;text-align:start;border-top:1px solid var(--garis);background:var(--kertas)}
+.kar-kepala .kiri{flex:1;min-width:0}.kar-kepala b{display:block;color:var(--daun)}.kar-kepala small{color:var(--redup);font-size:.8rem}
+.kar-kepala .panah{transition:transform .15s;color:var(--redup)}.kar-kepala[aria-expanded="true"] .panah{transform:rotate(90deg)}
+.kar-kepala[aria-expanded="true"]{background:var(--lunak)}
 .sub-tgl{padding:10px 16px 6px;font-weight:800;font-size:.85rem;color:var(--daun);background:var(--lunak);border-top:1px solid var(--garis)}
 .bar-mini{display:block;height:6px;border-radius:3px;background:var(--daun);opacity:.35;margin-top:7px;min-width:3px}
 
@@ -489,6 +493,7 @@ dialog::backdrop{background:rgba(10,30,18,.55)}
         <button class="btn kecil" id="muatLaporan">Muat ulang</button>
         <button class="btn kecil utama" id="eksporLaporan" data-admin hidden>Unduh rekap</button>
         <button class="btn kecil utama" id="eksporPenjualan" data-admin hidden>Unduh penjualan</button>
+        <button class="btn kecil utama" id="unduhAnalisis" type="button" hidden>Unduh analisis (PDF)</button>
       </div>
       <p class="info angka" id="waktuLaporan" style="margin:-6px 0 12px"></p>
       <div class="ringkas" id="ringkasLaporan"></div>
@@ -2025,13 +2030,11 @@ function serahkanBerkas(blob, nama){
 /* unduhan hanya boleh dibuat dari data yang memang milik tanggal yang sedang dipilih */
 const laporanSiap = () => { if (st.tglTrx === $("tglLaporan").value) return true; roti("Laporan tanggal ini belum selesai dimuat. Tunggu sebentar, atau tekan Muat ulang.", true); return false; };
 $("eksporPenjualan").onclick = () => {
-  if (st.modeLap === "bulan") return unduhBulan("penjualan");
   if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxPenjualan(), "penjualan-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
 };
 $("eksporLaporan").onclick = () => {
-  if (st.modeLap === "bulan") return unduhBulan("rekap");
   if (!laporanSiap()) return;
   if (!st.trx.some(t => !t.batal)) { roti("Belum ada penjualan di tanggal ini.", true); return; }
   try { serahkanBerkas(buatXlsxLaporan(), "rekap-" + $("tglLaporan").value + ".xlsx"); } catch (e) { roti(pesan(e), true); }
@@ -2049,7 +2052,8 @@ function aturModeLaporan(m, diam){
   document.querySelectorAll("#modeLaporan button").forEach(b => b.classList.toggle("aktif", b.dataset.m === m));
   const hari = m === "hari";
   $("tglLaporan").hidden = !hari; $("blnLaporan").hidden = m !== "bulan"; $("thnLaporan").hidden = m !== "tahun";
-  $("eksporLaporan").style.display = $("eksporPenjualan").style.display = m === "tahun" ? "none" : "";
+  $("eksporLaporan").style.display = $("eksporPenjualan").style.display = hari ? "" : "none";
+  $("unduhAnalisis").hidden = !(m === "bulan" && adalahAdmin());
   $("trxPeriode").hidden = m !== "bulan";
   $("isiHarian").hidden = !hari; $("isiPeriode").hidden = hari;
   $("ringkasLaporan").classList.toggle("periode", !hari);
@@ -2084,7 +2088,7 @@ async function muatPeriode(diam){
   if (error) { $("perPeriode").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
   st.periode = { kunci, mode: st.modeLap, judul: r.judul, data: data || { harian: [], barang: [] } };
   if (st.modeLap === "bulan") {
-    if (st.trxBulan && st.bulanTrx !== r.dari) { st.trxBulan = null; st.bulanTrx = null; st.tampilTrxBln = 100; }
+    if (st.trxBulan && st.bulanTrx !== r.dari) { st.trxBulan = null; st.bulanTrx = null; st.bukaKar = {}; }
     const [y, m] = r.dari.split("-").map(Number), awal = new Date(y, m - 1, 1), akhir = new Date(y, m, 1), semua = [];
     for (let dari = 0; ; dari += 1000) {
       const { data: d2, error: e2 } = await sb.from("transaksi").select("*").gte("waktu", awal.toISOString()).lt("waktu", akhir.toISOString())
@@ -2133,40 +2137,214 @@ function gambarPeriode(){
     : `<div class="kosong">Belum ada penjualan.</div>`);
 }
 /* Bulan: semua barang terjual, disusun persis seperti rekap harian (barang + harga), tetapi sebulan penuh */
+function barangBulan(){
+  /* per barang (kode barang + ukuran), semua harga dijumlah jadi satu baris supaya bisa diurutkan */
+  const peta = new Map();
+  for (const t of st.trxBulan) { if (t.batal) continue;
+    for (const i of (t.item || [])) {
+      const k = i.kunci || (i.nama + "|" + (i.ukuran || "")); let x = peta.get(k);
+      if (!x) { const kat = ITEM.find(it => it.kunci === i.kunci); x = { nama: kat ? kat.nama : i.nama, ukuran: kat ? (kat.ukuran || "") : (i.ukuran || ""), kat: kat ? kat.kat : -1, qty: 0, uang: 0, harga: new Set(), trx: 0, partai: 0 }; peta.set(k, x); }
+      x.qty = Math.round((x.qty + Number(i.qty)) * 100) / 100; x.uang += jumlahItem(i); x.harga.add(Number(i.harga)); x.trx++; if (i.tipe === "partai") x.partai += jumlahItem(i);
+    } }
+  return [...peta.values()].sort((a, b) => b.qty - a.qty || b.uang - a.uang);
+}
 function gambarBarangBulan(){
-  const rekap = rekapBarang(st.trxBulan.filter(t => !t.batal)), total = rekap.reduce((a, x) => a + x.uang, 0);
-  $("barangPeriode").innerHTML = `<h2>Semua barang terjual</h2><p class="info" style="padding:0 16px 8px">${ribuan(rekap.length)} baris barang, total ${rp(total)}. Harga berbeda dicatat terpisah, sama seperti rekap harian.</p>` +
-    (rekap.length ? rekap.map(x =>
-      `<div class="brs"><div class="kiri"><b>${esc(x.nama)}</b><small class="angka">${fq(x.qty)} x ${ribuan(x.harga)}${x.tipe === "partai" ? ` <span class="cap emas">Partai</span>` : x.tipe === "campur" ? ` <span class="cap emas">Ecer + partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`).join("")
+  const B = barangBulan(), total = B.reduce((a, x) => a + x.uang, 0);
+  $("barangPeriode").innerHTML = `<h2>Semua barang terjual</h2><p class="info" style="padding:0 16px 8px">${ribuan(B.length)} barang, total ${rp(total)}. Diurutkan dari jumlah terjual terbanyak.</p>` +
+    (B.length ? B.map((x, n) => { const h = [...x.harga].sort((a, b) => a - b);
+      const ket = h.length > 1 ? `${h.length} harga: ${ribuan(h[0])} – ${ribuan(h[h.length - 1])}` : `x ${ribuan(h[0])}`;
+      return `<div class="brs"><div class="kiri"><b>${n + 1}. ${esc(x.nama)}${x.ukuran ? " " + esc(x.ukuran) : ""}</b><small class="angka">terjual ${fq(x.qty)} · ${ket} · ${ribuan(x.trx)} kali dibeli${x.partai ? ` <span class="cap emas">ada partai</span>` : ""}</small></div><div class="kanan angka">${rp(x.uang)}</div></div>`; }).join("")
      : `<div class="kosong">Belum ada penjualan di bulan ini.</div>`);
 }
 /* Bulan: semua transaksi, dikelompokkan per tanggal (terbaru di atas), dibuka bertahap 100 per tekan */
+function kelompokKasir(T){
+  const kel = new Map();
+  for (const t of T) { const k = t.kasir_id || (t.kasir_kode + "|" + t.kasir_nama);
+    let g = kel.get(k); if (!g) kel.set(k, g = { k, kode: t.kasir_kode || "", nama: t.kasir_nama || "", trx: [], uang: 0, sah: 0, batal: 0 });
+    g.trx.push(t); if (t.batal) g.batal++; else { g.sah++; g.uang += Number(t.total); } }
+  return [...kel.values()].sort((a, b) => a.kode.localeCompare(b.kode, "id", { numeric: true }) || a.nama.localeCompare(b.nama));
+}
+/* Bulan: semua transaksi dipisah per karyawan. Tekan nama karyawan untuk membuka daftarnya. */
 function gambarTrxBulan(){
-  const T = st.trxBulan, n = st.tampilTrxBln || 100, batal = T.filter(t => t.batal).length;
-  let html = `<h2>Semua transaksi</h2><p class="info" style="padding:0 16px 8px">${ribuan(T.length - batal)} transaksi${batal ? `, ${batal} dibatalkan` : ""}. Tekan satu transaksi untuk melihat struknya.</p>`;
-  let tglSblm = "";
-  for (const t of T.slice(0, n)) {
-    const tgl = tglLokal(new Date(t.waktu));
-    if (tgl !== tglSblm) { const d = new Date(t.waktu); html += `<div class="sub-tgl">${NAMA_HARI[d.getDay()]}, ${d.getDate()} ${NAMA_BULAN[d.getMonth()]} ${d.getFullYear()}</div>`; tglSblm = tgl; }
-    const metode = (t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode)) + (Number(t.biaya_admin) > 0 ? " · admin " + ribuan(Number(t.biaya_admin)) : "");
-    html += `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${esc((t.kasir_kode ? t.kasir_kode + " " : "") + t.kasir_nama)} · ${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(metode)}${t.susulan ? ` <span class="cap emas">Susulan</span>` : ""}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
+  const T = st.trxBulan, batal = T.filter(t => t.batal).length, G = kelompokKasir(T); st.bukaKar = st.bukaKar || {};
+  let html = `<h2>Semua transaksi per karyawan</h2><p class="info" style="padding:0 16px 8px">${ribuan(T.length - batal)} transaksi${batal ? `, ${batal} dibatalkan` : ""}. Tekan nama karyawan untuk melihat transaksinya, lalu tekan transaksi untuk melihat struknya.</p>`;
+  for (const g of G) {
+    const buka = !!st.bukaKar[g.k], n = st.bukaKar[g.k] || 0;
+    html += `<button class="kar-kepala" type="button" data-kar="${esc(g.k)}" aria-expanded="${buka}"><span class="kode">${esc(g.kode || "-")}</span><span class="kiri"><b>${esc(g.nama)}</b><small class="angka">${ribuan(g.sah)} transaksi${g.batal ? " · " + g.batal + " dibatalkan" : ""} · rata-rata ${rp(g.sah ? g.uang / g.sah : 0)}</small></span><b class="angka">${rp(g.uang)}</b><span class="panah" aria-hidden="true">›</span></button>`;
+    if (!buka) continue;
+    let tglSblm = "";
+    for (const t of g.trx.slice(0, n)) {
+      const tgl = tglLokal(new Date(t.waktu));
+      if (tgl !== tglSblm) { const d = new Date(t.waktu); html += `<div class="sub-tgl">${NAMA_HARI[d.getDay()]}, ${d.getDate()} ${NAMA_BULAN[d.getMonth()]} ${d.getFullYear()}</div>`; tglSblm = tgl; }
+      const metode = (t.metode === "transfer" && t.rekening ? "Transfer ke " + t.rekening : (NAMA_METODE[t.metode] || t.metode)) + (Number(t.biaya_admin) > 0 ? " · admin " + ribuan(Number(t.biaya_admin)) : "");
+      html += `<button class="brs${t.batal ? " batal" : ""}" data-id="${t.id}"><div class="kiri"><b class="angka">${esc(jamTeks(t.waktu))} · ${esc(t.nomor || "#" + t.id)}</b><small>${t.pembeli ? esc(t.pembeli) + " · " : ""}${esc(metode)}${t.susulan ? ` <span class="cap emas">Susulan</span>` : ""}${t.batal ? ` <span class="cap merah">Batal</span>` : ""}</small></div><div class="kanan angka">${rp(t.total)}</div></button>`;
+    }
+    if (g.trx.length > n) html += `<div style="padding:10px 16px;text-align:center"><button class="btn kecil" type="button" data-lebih="${esc(g.k)}">Tampilkan lebih banyak (${ribuan(g.trx.length - n)} lagi)</button></div>`;
   }
   if (!T.length) html += `<div class="kosong">Belum ada transaksi di bulan ini.</div>`;
-  else if (T.length > n) html += `<div style="padding:12px 16px;text-align:center"><button class="btn kecil" id="lebihTrxBln" type="button">Tampilkan lebih banyak (${ribuan(T.length - n)} lagi)</button></div>`;
   $("trxPeriode").innerHTML = html;
 }
 $("trxPeriode").addEventListener("click", e => {
-  if (e.target.closest("#lebihTrxBln")) { st.tampilTrxBln = (st.tampilTrxBln || 100) + 100; gambarTrxBulan(); return; }
+  const kk = e.target.closest("[data-kar]");
+  if (kk) { st.bukaKar = st.bukaKar || {}; st.bukaKar[kk.dataset.kar] = st.bukaKar[kk.dataset.kar] ? 0 : 50; gambarTrxBulan(); return; }
+  const lb = e.target.closest("[data-lebih]");
+  if (lb) { st.bukaKar[lb.dataset.lebih] += 100; gambarTrxBulan(); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const t = (st.trxBulan || []).find(x => String(x.id) === b.dataset.id); if (t) bukaStruk(t, false);
 });
-function unduhBulan(jenis){
+const LEBAR_PDF={n:[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,556,556,556,222,556,333,1000,556,556,333,1000,667,333,1000,556,611,556,556,222,222,333,333,350,556,1000,333,1000,500,333,944,556,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,552,400,549,333,333,333,576,537,333,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,549,611,556,556,556,556,500,556,500],b:[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,556,556,556,278,556,500,1000,556,556,333,1000,667,333,1000,556,611,556,556,278,278,500,500,350,556,1000,333,1000,556,333,944,556,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,552,400,549,333,333,333,576,556,333,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,549,611,611,611,611,611,556,611,556]};
+/* ---------- penulis PDF kecil (tanpa pustaka): teks Helvetica, kotak, garis. Koordinat dalam poin, (0,0) kiri atas A4 ---------- */
+class PdfKecil {
+  constructor(){ this.hal = []; this.W = 595; this.H = 842; }
+  baru(){ this.c = []; this.hal.push(this.c); return this; }
+  static aman(t){ return String(t).replace(/[–—]/g, "-").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[^\x20-\x7E\xA0-\xFF]/g, "?"); }
+  lebar(t, u, b){ const L = LEBAR_PDF[b ? "b" : "n"]; let w = 0; for (const ch of PdfKecil.aman(t)) { const c = ch.charCodeAt(0); w += L[c - 32] || 556; } return w * u / 1000; }
+  warna(w){ const h = w.replace("#", ""); return [0, 2, 4].map(i => (parseInt(h.substr(i, 2), 16) / 255).toFixed(3)).join(" "); }
+  teks(x, y, t, o = {}){
+    const u = o.u || 10, b = !!o.b, s = PdfKecil.aman(t), w = this.lebar(s, u, b);
+    const xx = o.rata === "kanan" ? x - w : o.rata === "tengah" ? x - w / 2 : x;
+    const isi = s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    this.c.push(`BT /${b ? "F2" : "F1"} ${u} Tf ${this.warna(o.w || "#1c2a22")} rg ${xx.toFixed(2)} ${(this.H - y).toFixed(2)} Td (${isi}) Tj ET`);
+    return w;
+  }
+  bungkus(t, maks, u, b){ const kata = String(t).split(" "), baris = []; let cur = "";
+    for (const k of kata) { const c = cur ? cur + " " + k : k; if (this.lebar(c, u, b) <= maks || !cur) cur = c; else { baris.push(cur); cur = k; } }
+    if (cur) baris.push(cur); return baris; }
+  paragraf(x, y, t, maks, o = {}){ const u = o.u || 10, lh = o.lh || u * 1.4; for (const b of this.bungkus(t, maks, u, o.b)) { this.teks(x, y, b, o); y += lh; } return y; }
+  kotak(x, y, w, h, isi, garis){ this.c.push(`${isi ? this.warna(isi) + " rg" : ""} ${garis ? this.warna(garis) + " RG 0.6 w" : ""} ${x.toFixed(2)} ${(this.H - y - h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re ${isi && garis ? "B" : isi ? "f" : "S"}`); }
+  garis(x1, y1, x2, y2, w = "#c9d3c4", t = 0.6, putus){ this.c.push(`${this.warna(w)} RG ${t} w ${putus ? "[3 2] 0 d" : "[] 0 d"} ${x1.toFixed(2)} ${(this.H - y1).toFixed(2)} m ${x2.toFixed(2)} ${(this.H - y2).toFixed(2)} l S [] 0 d`); }
+  blob(){
+    const obj = [], tambah = s => { obj.push(s); return obj.length; };
+    const katalog = tambah(""), halaman = tambah(""), f1 = tambah("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"), f2 = tambah("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    const kids = [];
+    for (const c of this.hal) { const isi = c.join("\n"), id = tambah(`<< /Length ${isi.length} >>\nstream\n${isi}\nendstream`);
+      kids.push(tambah(`<< /Type /Page /Parent ${halaman} 0 R /MediaBox [0 0 ${this.W} ${this.H}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${id} 0 R >>`)); }
+    obj[katalog - 1] = `<< /Type /Catalog /Pages ${halaman} 0 R >>`;
+    obj[halaman - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + " 0 R").join(" ")}] /Count ${kids.length} >>`;
+    let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"; const pos = [];
+    obj.forEach((o, i) => { pos.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+    const xref = out.length;
+    out += `xref\n0 ${obj.length + 1}\n0000000000 65535 f \n` + pos.map(p => String(p).padStart(10, "0") + " 00000 n \n").join("") + `trailer\n<< /Size ${obj.length + 1} /Root ${katalog} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    const bytes = new Uint8Array(out.length); for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 255;
+    return new Blob([bytes], { type: "application/pdf" });
+  }
+}
+const juta = n => { n = Number(n) || 0; return n >= 1e9 ? (n / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " M" : n >= 1e6 ? (n / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 }) + " jt" : n >= 1e3 ? Math.round(n / 1e3) + " rb" : String(Math.round(n)); };
+const persen = (a, b) => b ? Math.round(100 * a / b) + "%" : "0%";
+/* Laporan analisis satu bulan: ringkasan, keterangan otomatis, grafik, dan tabel. */
+async function buatAnalisisBulan(){
+  const r = rentangPeriode(), [Y, M] = r.dari.split("-").map(Number), T = st.trxBulan.filter(t => !t.batal);
+  const sekarang = new Date(), akhirHari = (Y === sekarang.getFullYear() && M === sekarang.getMonth() + 1) ? sekarang.getDate() : new Date(Y, M, 0).getDate();
+  // bulan lalu untuk perbandingan (dari ringkasan database, cepat)
+  let lalu = null; try { const d0 = new Date(Y, M - 2, 1), d1 = new Date(Y, M - 1, 0);
+    const { data } = await sb.rpc("laporan_periode", { p_dari: tglLokal(d0), p_sampai: tglLokal(d1) });
+    if (data && data.harian && data.harian.length) lalu = { omzet: data.harian.reduce((a, x) => a + Number(x.omzet), 0), pembeli: data.harian.reduce((a, x) => a + Number(x.pembeli), 0), nama: NAMA_BULAN[d0.getMonth()] + " " + d0.getFullYear() }; } catch (e) {}
+  // olah data
+  const hari = Array.from({ length: akhirHari }, (_, i) => ({ d: i + 1, omzet: 0, pembeli: 0 }));
+  const mingguan = Array.from({ length: 7 }, () => ({ omzet: 0, hari: new Set() })), jam = new Array(24).fill(0), kat = new Map();
+  let omzet = 0, tunai = 0, transfer = 0, partai = 0;
+  for (const t of T) { const w = new Date(t.waktu), h = hari[w.getDate() - 1], tot = Number(t.total);
+    omzet += tot; if (t.metode === "tunai") tunai += tot; else transfer += tot;
+    if (h) { h.omzet += tot; h.pembeli++; }
+    mingguan[w.getDay()].omzet += tot; mingguan[w.getDay()].hari.add(w.getDate()); jam[w.getHours()]++;
+    for (const i of (t.item || [])) { const u = jumlahItem(i); if (i.tipe === "partai") partai += u;
+      const it = ITEM.find(x => x.kunci === i.kunci), nk = it ? KATEGORI[it.kat] : "Lainnya"; kat.set(nk, (kat.get(nk) || 0) + u); } }
+  const buka = hari.filter(h => h.pembeli), rata = buka.length ? omzet / buka.length : 0;
+  const terbaik = buka.slice().sort((a, b) => b.omzet - a.omzet)[0], tersepi = buka.slice().sort((a, b) => a.omzet - b.omzet)[0];
+  const tglNama = d => { const x = new Date(Y, M - 1, d); return `${NAMA_HARI[x.getDay()]} ${d} ${NAMA_BULAN[M - 1].slice(0, 3)}`; };
+  const HARI_PANJANG = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+  const rataHari = mingguan.map((m, i) => ({ i, nama: HARI_PANJANG[i], v: m.hari.size ? m.omzet / m.hari.size : 0 }));
+  const hariTop = rataHari.slice().sort((a, b) => b.v - a.v)[0], jamTop = jam.indexOf(Math.max(...jam));
+  const katList = [...kat.entries()].sort((a, b) => b[1] - a[1]);
+  const B = barangBulan(), topUang = B.slice().sort((a, b) => b.uang - a.uang), topSering = B.slice().sort((a, b) => b.trx - a.trx)[0];
+  const K = kelompokKasir(T);
+  // keterangan otomatis
+  const ket = [];
+  ket.push(`Omzet ${r.judul} ${rp(omzet)} dari ${ribuan(T.length)} pembeli dalam ${buka.length} hari berjualan, rata-rata ${rp(rata)} per hari dan ${rp(T.length ? omzet / T.length : 0)} per pembeli.`);
+  if (lalu) { const sel = omzet - lalu.omzet; ket.push(`Dibanding ${lalu.nama} (${rp(lalu.omzet)}, ${ribuan(lalu.pembeli)} pembeli), omzet ${sel >= 0 ? "naik" : "turun"} ${persen(Math.abs(sel), lalu.omzet)} atau ${rp(Math.abs(sel))}.`); }
+  else ket.push("Belum ada data bulan sebelumnya di kasir, jadi belum bisa dibandingkan.");
+  if (terbaik) ket.push(`Hari paling ramai ${tglNama(terbaik.d)}: ${rp(terbaik.omzet)} dari ${terbaik.pembeli} pembeli. Paling sepi ${tglNama(tersepi.d)}: ${rp(tersepi.omzet)}.`);
+  if (hariTop && hariTop.v) ket.push(`Rata-rata omzet tertinggi jatuh pada hari ${hariTop.nama} (${rp(hariTop.v)}). Jam paling ramai ${String(jamTop).padStart(2, "0")}.00-${String(jamTop + 1).padStart(2, "0")}.00 (${jam[jamTop]} transaksi).`);
+  ket.push(`Pembayaran ${persen(tunai, omzet)} tunai dan ${persen(transfer, omzet)} transfer. Penjualan partai menyumbang ${persen(partai, omzet)} omzet.`);
+  if (katList.length) ket.push(`Kategori dengan omzet terbesar: ${katList[0][0]} (${persen(katList[0][1], omzet)}).`);
+  if (topUang.length) ket.push(`Barang dengan omzet terbesar: ${topUang[0].nama}${topUang[0].ukuran ? " " + topUang[0].ukuran : ""} (${rp(topUang[0].uang)}). Paling sering dibeli: ${topSering.nama}${topSering.ukuran ? " " + topSering.ukuran : ""} (${topSering.trx} kali).`);
+  // ---------- gambar PDF ----------
+  const P = new PdfKecil(), HIJAU = "#0f3d24", EMAS = "#c9993a", REDUP = "#56655b", L = 40, R = 555, LW = R - L;
+  let nomorHal = 0;
+  const kepala = (judul) => { P.baru(); nomorHal++;
+    P.kotak(0, 0, 595, 70, HIJAU); P.kotak(0, 70, 595, 4, EMAS);
+    P.teks(L, 32, "Analisis Penjualan " + r.judul, { u: 18, b: true, w: "#ffffff" });
+    P.teks(L, 52, "CV Azzahra Mutiara Tani  |  Kasir AMT", { u: 10, w: "#d9e8dc" });
+    P.teks(R, 52, judul, { u: 10, w: "#f3d58a", rata: "kanan", b: true });
+    P.garis(L, 812, R, 812); P.teks(L, 826, "Dibuat " + sekarang.toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" }) + " dari data Kasir AMT. Transaksi yang dibatalkan tidak dihitung.", { u: 7.5, w: REDUP });
+    P.teks(R, 826, "Halaman " + nomorHal, { u: 7.5, w: REDUP, rata: "kanan" }); return 100; };
+  const subjudul = (y, t, catatan) => { P.teks(L, y, t, { u: 12.5, b: true, w: HIJAU }); if (catatan) y = P.paragraf(L, y + 14, catatan, LW, { u: 8.5, w: REDUP, lh: 11 }); else y += 6; return y + 8; };
+  const grafikBatang = (y, data, o) => { // data: [{label, v}] vertikal
+    const h = o.h || 150, x0 = L + 34, w = LW - 34, maks = Math.max(1, ...data.map(d => d.v)), bw = w / data.length;
+    for (let g = 0; g <= 4; g++) { const yy = y + h - h * g / 4; P.garis(x0, yy, R, yy, "#e3e9df", .5); P.teks(x0 - 4, yy + 3, o.fmt(maks * g / 4), { u: 6.5, w: REDUP, rata: "kanan" }); }
+    data.forEach((d, i) => { const bh = h * d.v / maks; if (bh > 0) P.kotak(x0 + i * bw + bw * .15, y + h - bh, bw * .7, bh, d.warna || (o.sorot && o.sorot(d) ? EMAS : "#2f9b52"));
+      if (!o.tiap || i % o.tiap === 0 || i === data.length - 1) P.teks(x0 + i * bw + bw / 2, y + h + 10, d.label, { u: 6.5, w: REDUP, rata: "tengah" }); });
+    if (o.garisRata) { const yy = y + h - h * o.garisRata / maks; P.garis(x0, yy, R, yy, "#b3372f", .9, true); P.teks(R, yy - 3, "rata-rata " + o.fmt(o.garisRata), { u: 6.5, w: "#b3372f", rata: "kanan" }); }
+    return y + h + 24; };
+  const grafikMendatar = (y, data, o) => { // data: [{label, v, teks}]
+    const xl = L + (o.lebarLabel || 130), w = R - xl - 135, maks = Math.max(1, ...data.map(d => d.v));
+    data.forEach((d, i) => { const yy = y + i * 18; P.teks(L, yy + 10, d.label, { u: 8.5 }); P.kotak(xl, yy + 2, Math.max(1, w * d.v / maks), 11, d.warna || "#2f9b52"); P.teks(R, yy + 10, d.teks, { u: 8.5, b: true, rata: "kanan" }); });
+    return y + data.length * 18 + 10; };
+  const tabel = (y, kolom, baris) => { // kolom: [{j, w, rata}]
+    let x = L; P.kotak(L, y, LW, 16, "#eaf1e4"); kolom.forEach(k => { P.teks(k.rata === "kanan" ? x + k.w - 4 : x + 4, y + 11, k.j, { u: 8, b: true, w: HIJAU, rata: k.rata === "kanan" ? "kanan" : undefined }); x += k.w; }); y += 16;
+    baris.forEach((b, n) => { if (n % 2) P.kotak(L, y, LW, 15, "#f6f9f3"); x = L; kolom.forEach((k, i) => { let t = String(b[i]); while (P.lebar(t, 8) > k.w - 8 && t.length > 3) t = t.slice(0, -4) + "...";
+        P.teks(k.rata === "kanan" ? x + k.w - 4 : x + 4, y + 10.5, t, { u: 8, rata: k.rata === "kanan" ? "kanan" : undefined }); x += k.w; }); y += 15; });
+    P.garis(L, y, R, y); return y + 12; };
+  // halaman 1: ringkasan + keterangan
+  let y = kepala("Ringkasan");
+  const kartu = [["Omzet", rp(omzet)], ["Jumlah pembeli", ribuan(T.length)], ["Hari berjualan", buka.length + " hari"], ["Rata-rata per hari", rp(rata)],
+                 ["Total tunai", rp(tunai)], ["Total transfer", rp(transfer)], ["Penjualan partai", rp(partai)], ["Rata-rata per pembeli", rp(T.length ? omzet / T.length : 0)]];
+  kartu.forEach(([j, v], i) => { const x = L + (i % 4) * (LW / 4), yy = y + Math.floor(i / 4) * 52; P.kotak(x + 2, yy, LW / 4 - 4, 46, "#f6f9f3", "#dbe3d4");
+    P.teks(x + 10, yy + 15, j, { u: 7.5, w: REDUP }); P.teks(x + 10, yy + 34, v, { u: v.length > 13 ? 10.5 : 12, b: true, w: HIJAU }); });
+  y += 118; y = subjudul(y, "Keterangan", "Ringkasan otomatis dari data bulan ini. Gunakan untuk melihat arah penjualan dan bahan keputusan stok.");
+  for (const k of ket) { P.kotak(L, y - 6, 4, 4, EMAS); y = P.paragraf(L + 12, y, k, LW - 12, { u: 9.5, lh: 13 }) + 5; }
+  y += 6; y = subjudul(y, "Kinerja per karyawan", "Jumlah transaksi dan omzet yang dicatat tiap karyawan bulan ini.");
+  y = tabel(y, [{ j: "Karyawan", w: 200 }, { j: "Transaksi", w: 80, rata: "kanan" }, { j: "Omzet", w: 120, rata: "kanan" }, { j: "Rata-rata", w: 70, rata: "kanan" }, { j: "Porsi", w: 45, rata: "kanan" }],
+    K.map(g => [(g.kode ? g.kode + " " : "") + g.nama, ribuan(g.sah), rp(g.uang), juta(g.sah ? g.uang / g.sah : 0), persen(g.uang, omzet)]));
+  // halaman 2: tren harian
+  y = kepala("Tren harian");
+  y = subjudul(y, "Omzet per hari", "Tiap batang adalah omzet satu tanggal. Batang emas = hari paling ramai. Garis merah putus-putus = rata-rata hari berjualan. Tanggal tanpa batang berarti toko tutup atau belum ada penjualan.");
+  y = grafikBatang(y, hari.map(h => ({ label: String(h.d), v: h.omzet, hBest: terbaik && h.d === terbaik.d })), { h: 170, fmt: juta, garisRata: rata, sorot: d => d.hBest, tiap: akhirHari > 20 ? 2 : 1 });
+  y = subjudul(y + 6, "Jumlah pembeli per hari", "Banyaknya transaksi tiap tanggal. Bandingkan dengan grafik omzet: hari yang pembelinya sedikit tapi omzetnya besar biasanya ada pembelian partai.");
+  y = grafikBatang(y, hari.map(h => ({ label: String(h.d), v: h.pembeli, warna: "#5b8f6b" })), { h: 130, fmt: n => String(Math.round(n)), tiap: akhirHari > 20 ? 2 : 1 });
+  // halaman 3: pola
+  y = kepala("Pola penjualan");
+  y = subjudul(y, "Rata-rata omzet menurut hari", "Rata-rata omzet untuk tiap hari dalam seminggu (hanya hari yang ada penjualannya). Membantu mengatur jadwal jaga dan stok.");
+  const urutHari = [1, 2, 3, 4, 5, 6, 0];
+  y = grafikMendatar(y, urutHari.map(i => ({ label: rataHari[i].nama, v: rataHari[i].v, teks: rataHari[i].v ? rp(rataHari[i].v) : "-", warna: hariTop && i === hariTop.i ? EMAS : "#2f9b52" })), { lebarLabel: 70 });
+  y = subjudul(y + 4, "Jam ramai", "Jumlah transaksi menurut jam dicatat. Jam dengan batang tertinggi adalah waktu paling sibuk.");
+  const jamAda = jam.map((v, i) => ({ i, v })).filter(x => x.i >= 6 && x.i <= 20);
+  y = grafikBatang(y, jamAda.map(x => ({ label: String(x.i).padStart(2, "0"), v: x.v, warna: x.i === jamTop ? EMAS : "#5b8f6b" })), { h: 110, fmt: n => String(Math.round(n)) });
+  y = subjudul(y + 4, "Komposisi omzet", "Pembagian omzet menurut cara bayar dan jenis harga.");
+  y = grafikMendatar(y, [{ label: "Tunai", v: tunai, teks: rp(tunai) + "  (" + persen(tunai, omzet) + ")" }, { label: "Transfer", v: transfer, teks: rp(transfer) + "  (" + persen(transfer, omzet) + ")", warna: "#5b5bd6" },
+    { label: "Ecer", v: omzet - partai, teks: rp(omzet - partai) + "  (" + persen(omzet - partai, omzet) + ")" }, { label: "Partai", v: partai, teks: rp(partai) + "  (" + persen(partai, omzet) + ")", warna: EMAS }], { lebarLabel: 70 });
+  y = subjudul(y + 4, "Omzet per kategori", "Kategori diambil dari katalog. Barang yang tidak ada di katalog masuk Lainnya.");
+  grafikMendatar(y, katList.map(([n, v]) => ({ label: n, v, teks: rp(v) + "  (" + persen(v, omzet) + ")", warna: WARNA_KAT[KATEGORI.indexOf(n)] || "#8a9a8f" })), { lebarLabel: 100 });
+  // halaman 4: barang
+  y = kepala("Barang");
+  y = subjudul(y, "20 barang dengan omzet terbesar", "Barang yang paling banyak menghasilkan uang bulan ini. Kolom Dibeli = berapa kali barang itu masuk transaksi.");
+  y = tabel(y, [{ j: "No", w: 26 }, { j: "Barang", w: 235 }, { j: "Terjual", w: 60, rata: "kanan" }, { j: "Dibeli", w: 50, rata: "kanan" }, { j: "Omzet", w: 95, rata: "kanan" }, { j: "Porsi", w: 49, rata: "kanan" }],
+    topUang.slice(0, 20).map((x, n) => [n + 1, x.nama + (x.ukuran ? " " + x.ukuran : ""), fq(x.qty), ribuan(x.trx) + "x", rp(x.uang), persen(x.uang, omzet)]));
+  y = subjudul(y + 4, "20 barang paling sering dibeli", "Barang yang paling sering masuk transaksi. Barang di daftar ini sebaiknya tidak sampai kosong stoknya.");
+  tabel(y, [{ j: "No", w: 26 }, { j: "Barang", w: 235 }, { j: "Dibeli", w: 60, rata: "kanan" }, { j: "Terjual", w: 60, rata: "kanan" }, { j: "Omzet", w: 134, rata: "kanan" }],
+    B.slice().sort((a, b) => b.trx - a.trx).slice(0, 20).map((x, n) => [n + 1, x.nama + (x.ukuran ? " " + x.ukuran : ""), ribuan(x.trx) + "x", fq(x.qty), rp(x.uang)]));
+  return P.blob();
+}
+async function unduhBulan(){
   const r = rentangPeriode();
   if (!st.trxBulan || st.bulanTrx !== r.dari) { roti("Laporan bulan ini belum selesai dimuat. Tunggu sebentar, atau tekan Muat ulang.", true); return; }
   if (!st.trxBulan.some(t => !t.batal)) { roti("Belum ada penjualan di bulan ini.", true); return; }
-  const judul = r.judul.toUpperCase(), nama = (jenis === "rekap" ? "rekap-" : "penjualan-") + r.dari.slice(0, 7) + ".xlsx";
-  try { serahkanBerkas(jenis === "rekap" ? buatXlsxLaporan(st.trxBulan, judul) : buatXlsxPenjualan(st.trxBulan, judul), nama); } catch (e) { roti(pesan(e), true); }
+  const b = $("unduhAnalisis"); b.disabled = true; const awal = b.textContent; b.textContent = "Menyusun…";
+  try { serahkanBerkas(await buatAnalisisBulan(), "analisis-penjualan-" + r.dari.slice(0, 7) + ".pdf"); }
+  catch (e) { roti(pesan(e), true); }
+  finally { b.disabled = false; b.textContent = awal; }
 }
+$("unduhAnalisis").onclick = unduhBulan;
 $("perPeriode").addEventListener("click", ev => {
   const b = ev.target.closest("button.brs"); if (!b) return;
   if (b.dataset.tgl) { $("tglLaporan").value = b.dataset.tgl; st.hariLaporan = tglLokal(new Date()); aturModeLaporan("hari"); }
