@@ -886,7 +886,7 @@ $("cekLagi").onclick = async () => {
 async function keluar(){
   try { await sb.auth.signOut(); } catch (e) {}
   st.drafSiap = false; buangDraf();
-  pengguna = profil = null; keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.trxBulan = null; st.bulanTrx = null; st.periode = null; st.ubah = null; st.benihKirim = null; aturPitaUbah();
+  pengguna = profil = null; aturLangganan(); keranjang.clear(); barang.clear(); st.trx = []; st.tglTrx = null; st.trxBulan = null; st.bulanTrx = null; st.periode = null; st.ubah = null; st.benihKirim = null; aturPitaUbah();
   document.body.classList.remove("kr-buka");
   aturMode(false); tampilLayar("layarMasuk");
 }
@@ -1015,6 +1015,7 @@ function tampilHal(h){
   ["kasir", "laporan", "barang", "karyawan"].forEach(x => { $("hal-" + x).hidden = x !== h; });
   $("tab").querySelectorAll("button").forEach(b => { if (b.dataset.hal === h) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   document.body.classList.remove("kr-buka");
+  aturLangganan();
 }
 function bukaHal(h){
   if ((h === "barang" && !adalahAdmin()) || (h === "karyawan" && !adalahPemilik())) h = "kasir";
@@ -1773,13 +1774,42 @@ async function muatLaporan(diam){
   if (urut !== st.urutLaporan) return;                         // sudah ada permintaan yang lebih baru
   if (error) { if (!diam || !st.tglTrx) $("daftarTrx").innerHTML = `<div class="kosong"><h3>Gagal memuat laporan</h3><p>${esc(pesan(error))}</p></div>`; return; }
   st.trx = data || []; st.tglTrx = tgl; gambarLaporan();
-  $("waktuLaporan").textContent = "Data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  st.lapWaktu = Date.now();
+  $("waktuLaporan").textContent = "Data per " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + (st.rtAktif ? " · diperbarui otomatis saat ada transaksi" : "");
 }
 /* selama menu Laporan terbuka, data diperbarui sendiri tiap menit dan saat aplikasi dibuka lagi,
    supaya Excel yang diunduh admin tidak ketinggalan penjualan terbaru */
+/* ---------- penyegaran laporan ----------
+   Laporan dimuat ulang HANYA kalau ada transaksi yang disimpan, diubah, atau dibatalkan (Supabase Realtime),
+   bukan terus-menerus. Sebagai cadangan (sinyal putus, Realtime belum aktif), tetap dimuat ulang paling
+   lama 10 menit sekali, dan setiap kali aplikasi dibuka lagi dari latar belakang. */
 const segarkanLaporan = () => { if (profil && st.hal === "laporan" && !document.hidden && !$("dlgStruk").open) muatLaporan(true); };
-setInterval(segarkanLaporan, 60000);
+setInterval(() => {
+  const jeda = st.rtAktif ? 10 * 60000 : 60000;          // tanpa Realtime: seperti dulu, tiap menit
+  if (Date.now() - (st.lapWaktu || 0) >= jeda) segarkanLaporan();
+}, 60000);
 document.addEventListener("visibilitychange", segarkanLaporan);
+var saluranTrx = null, tundaRt = null;
+function aturLangganan(){
+  const perlu = !!profil && st.hal === "laporan" && !$("aplikasi").hidden;
+  if (perlu && !saluranTrx) {
+    saluranTrx = sb.channel("transaksi-laporan")
+      .on("postgres_changes", { event: "*", schema: "public", table: "transaksi" }, () => {
+        clearTimeout(tundaRt);
+        tundaRt = setTimeout(() => {                        // beberapa simpanan berdekatan cukup dimuat sekali
+          if (st.modeLap && st.modeLap !== "hari") return segarkanLaporan();          // Bulan/Tahun: tetap dibatasi 10 menit
+          if ($("tglLaporan").value === tglLokal(new Date())) segarkanLaporan();     // hanya kalau melihat hari ini
+        }, 2500);
+      })
+      .subscribe(status => {
+        const aktif = status === "SUBSCRIBED";
+        if (aktif !== !!st.rtAktif) { st.rtAktif = aktif; if (aktif) segarkanLaporan(); }
+      });
+  } else if (!perlu && saluranTrx) {
+    try { sb.removeChannel(saluranTrx); } catch (e) {}
+    saluranTrx = null; st.rtAktif = false; clearTimeout(tundaRt);
+  }
+}
 /* gabungkan penjualan per barang + harga, urut dari transaksi paling awal (seperti rekap harian admin) */
 function rekapBarang(sah){
   /* Susunan rekap:
